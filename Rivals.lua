@@ -1,168 +1,153 @@
 -- ==========================================
--- MUMU RIVALS - 修正 J 鍵與拖曳功能
+-- MUMU RIVALS - UI 穩定性終極修復版
 -- ==========================================
 
 local Settings = {
     ESP = true,
-    SmoothAim = true,    
-    SnapLock = true,     
-    SilentAim = true,    
-    FOV = 200,
-    MaxDistance = 300,
-    SmoothValue = 0.08,  
+    Aimbot = true,
+    Smoothness = 0.1,
     Prediction = 0.15,
-    WallCheck = true
+    FOV = 250
 }
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
+local Mouse = LocalPlayer:GetMouse()
 local Camera = workspace.CurrentCamera
 
--- [[ UI 建立 ]]
+-- [[ UI 強制重建 ]]
 local SafeGui = (gethui and gethui()) or game:GetService("CoreGui")
-if SafeGui:FindFirstChild("MUMU_REFIX") then SafeGui.MUMU_REFIX:Destroy() end
+if SafeGui:FindFirstChild("MUMU_FIXED") then SafeGui.MUMU_FIXED:Destroy() end
+
 local ScreenGui = Instance.new("ScreenGui", SafeGui)
-ScreenGui.Name = "MUMU_REFIX"
+ScreenGui.Name = "MUMU_FIXED"
+ScreenGui.IgnoreGuiInset = true -- 忽略上方黑條偏移
 
 local Main = Instance.new("Frame", ScreenGui)
-Main.Size = UDim2.fromOffset(380, 520)
-Main.Position = UDim2.fromScale(0.5, 0.4) -- 初始位置偏上一點
-Main.AnchorPoint = Vector2.new(0.5, 0.5)
+Main.Size = UDim2.fromOffset(320, 420)
+Main.Position = UDim2.new(0.5, -160, 0.5, -210) -- 居中
 Main.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-Main.Active = true -- 必須開啟以支援拖曳
-Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 15)
+Main.BorderSizePixel = 0
+Main.Active = true
+Main.Draggable = false -- 關閉原生，改用下方手寫
+
+local Corner = Instance.new("UICorner", Main)
+Corner.CornerRadius = UDim.new(0, 15)
+
 local Stroke = Instance.new("UIStroke", Main)
 Stroke.Thickness = 4
-Stroke.Color = Color3.fromRGB(255, 50, 50)
+Stroke.Color = Color3.fromRGB(255, 0, 0)
 
 local Title = Instance.new("TextLabel", Main)
-Title.Size = UDim2.new(1, 0, 0, 70)
-Title.Text = "⚡ MUMU ULTRA V7.1"
-Title.TextSize = 30
+Title.Size = UDim2.new(1, 0, 0, 80)
+Title.Text = "⚡ MUMU V9"
+Title.TextSize = 35
 Title.Font = Enum.Font.GothamBlack
 Title.TextColor3 = Color3.new(1, 1, 1)
 Title.BackgroundTransparency = 1
 
 local Container = Instance.new("Frame", Main)
-Container.Size = UDim2.new(0.9, 0, 0.8, 0)
-Container.Position = UDim2.fromScale(0.05, 0.15)
+Container.Size = UDim2.new(0.9, 0, 0.7, 0)
+Container.Position = UDim2.fromScale(0.05, 0.22)
 Container.BackgroundTransparency = 1
-Instance.new("UIListLayout", Container).Padding = UDim.new(0, 10)
+local Layout = Instance.new("UIListLayout", Container)
+Layout.Padding = UDim.new(0, 15)
 
--- [[ 1. 補回：流暢拖曳腳本 ]]
-local dragging, dragInput, dragStart, startPos
-local function update(input)
-    local delta = input.Position - dragStart
-    Main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-end
+-- [[ 1. 強制拖拽腳本 (不依賴屬性) ]]
+local Dragging = false
+local DragInput, DragStart, StartPos
 
 Main.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        dragging = true
-        dragStart = input.Position
-        startPos = Main.Position
-        input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.End then dragging = false end
-        end)
+        Dragging = true
+        DragStart = input.Position
+        StartPos = Main.Position
     end
 end)
 
-Main.InputChanged:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseMovement then dragInput = input end
+game:GetService("UserInputService").InputChanged:Connect(function(input)
+    if Dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+        local Delta = input.Position - DragStart
+        Main.Position = UDim2.new(StartPos.X.Scale, StartPos.X.Offset + Delta.X, StartPos.Y.Scale, StartPos.Y.Offset + Delta.Y)
+    end
 end)
 
-UserInputService.InputChanged:Connect(function(input)
-    if input == dragInput and dragging then update(input) end
+game:GetService("UserInputService").InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        Dragging = false
+    end
 end)
 
--- [[ 2. 補回：J 鍵隱藏功能 ]]
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if not gameProcessed and input.KeyCode == Enum.KeyCode.J then
+-- [[ 2. 強制 J 鍵開關 (最直接方式) ]]
+Mouse.KeyDown:Connect(function(key)
+    if key:lower() == "j" then
         Main.Visible = not Main.Visible
     end
 end)
 
--- [[ 按鈕生成器 ]]
-local function AddToggle(name, default, callback)
-    local state = default
+-- [[ 3. 按鈕與功能 ]]
+local function AddToggle(name, settingKey)
     local btn = Instance.new("TextButton", Container)
-    btn.Size = UDim2.new(1, 0, 0, 55)
-    btn.BackgroundColor3 = state and Color3.fromRGB(255, 50, 50) or Color3.fromRGB(40, 40, 40)
-    btn.Text = "  " .. name .. ": " .. (state and "ON" or "OFF")
-    btn.TextSize = 22 -- 確保字體超大
+    btn.Size = UDim2.new(1, 0, 0, 65)
+    btn.BackgroundColor3 = Settings[settingKey] and Color3.fromRGB(200, 0, 0) or Color3.fromRGB(45, 45, 45)
+    btn.Text = name .. ": " .. (Settings[settingKey] and "ON" or "OFF")
+    btn.TextSize = 22
     btn.Font = Enum.Font.GothamBold
     btn.TextColor3 = Color3.new(1, 1, 1)
-    btn.TextXAlignment = Enum.TextXAlignment.Left
     Instance.new("UICorner", btn)
     
     btn.MouseButton1Click:Connect(function()
-        state = not state
-        btn.BackgroundColor3 = state and Color3.fromRGB(255, 50, 50) or Color3.fromRGB(40, 40, 40)
-        btn.Text = "  " .. name .. ": " .. (state and "ON" or "OFF")
-        callback(state)
+        Settings[settingKey] = not Settings[settingKey]
+        btn.Text = name .. ": " .. (Settings[settingKey] and "ON" or "OFF")
+        btn.BackgroundColor3 = Settings[settingKey] and Color3.fromRGB(200, 0, 0) or Color3.fromRGB(45, 45, 45)
     end)
 end
 
-AddToggle("ESP 框框透視", Settings.ESP, function(v) Settings.ESP = v end)
-AddToggle("右鍵絲滑瞄準", Settings.SmoothAim, function(v) Settings.SmoothAim = v end)
-AddToggle("射擊瞬間鎖頭", Settings.SnapLock, function(v) Settings.SnapLock = v end)
-AddToggle("子彈轉彎吸附", Settings.SilentAim, function(v) Settings.SilentAim = v end)
-AddToggle("隔牆檢查", Settings.WallCheck, function(v) Settings.WallCheck = v end)
+AddToggle("ESP (透視)", "ESP")
+AddToggle("暴力鎖頭", "Aimbot")
 
--- [[ 核心邏輯 (Silent Aim & Aimbot) ]]
-local function GetTarget()
+-- [[ 4. 暴力鎖定邏輯 ]]
+local function GetClosest()
     local target, maxDist = nil, Settings.FOV
     for _, p in pairs(Players:GetPlayers()) do
         if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") and p.Character.Humanoid.Health > 0 then
-            local dist = (LocalPlayer.Character.HumanoidRootPart.Position - p.Character.HumanoidRootPart.Position).Magnitude
-            if dist > Settings.MaxDistance then continue end
             local pos, onScreen = Camera:WorldToViewportPoint(p.Character.Head.Position)
             if onScreen then
-                local mDist = (Vector2.new(pos.X, pos.Y) - UserInputService:GetMouseLocation()).Magnitude
-                if mDist < maxDist then target = p.Character maxDist = mDist end
+                local dist = (Vector2.new(pos.X, pos.Y) - Vector2.new(Mouse.X, Mouse.Y)).Magnitude
+                if dist < maxDist then maxDist = dist target = p.Character end
             end
         end
     end
     return target
 end
 
--- 子彈轉彎攔截
-local oldNamecall
-oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
-    local args = {...}
-    local method = getnamecallmethod()
-    if Settings.SilentAim and method == "Raycast" and not checkcaller() then
-        local t = GetTarget()
-        if t then args[2] = (t.Head.Position - args[1]).Unit * 1000 return oldNamecall(self, unpack(args)) end
-    end
-    return oldNamecall(self, ...)
-end)
-
--- 每一幀更新
 RunService.RenderStepped:Connect(function()
     -- ESP
     if Settings.ESP then
         for _, p in pairs(Players:GetPlayers()) do
-            if p ~= LocalPlayer and p.Character and not p.Character:FindFirstChild("MUMU_H") then
-                Instance.new("Highlight", p.Character).Name = "MUMU_H"
+            if p ~= LocalPlayer and p.Character then
+                local h = p.Character:FindFirstChild("MUMU_Highlight") or Instance.new("Highlight", p.Character)
+                h.Name = "MUMU_Highlight"
+                h.FillColor = Color3.new(1, 0, 0)
+                h.FillTransparency = 0.5
             end
         end
     end
 
-    -- 瞄準
-    if UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
-        local t = GetTarget()
-        if t then
+    -- 鎖頭
+    if Settings.Aimbot and game:GetService("UserInputService"):IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
+        local t = GetClosest()
+        if t and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
             local targetPos = t.Head.Position + (t.HumanoidRootPart.Velocity * Settings.Prediction)
-            local isFiring = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1)
-            local strength = (isFiring and Settings.SnapLock) and 1.0 or (Settings.SmoothAim and Settings.SmoothValue or 0)
+            local isFiring = game:GetService("UserInputService"):IsMouseButtonPressed(Enum.UserInputType.MouseButton1)
+            local strength = isFiring and 0.85 or Settings.Smoothness
             
-            if strength > 0 then
-                Camera.CFrame = Camera.CFrame:Lerp(CFrame.lookAt(Camera.CFrame.Position, targetPos), strength)
-                LocalPlayer.Character.HumanoidRootPart.CFrame = LocalPlayer.Character.HumanoidRootPart.CFrame:Lerp(CFrame.new(LocalPlayer.Character.HumanoidRootPart.Position, Vector3.new(targetPos.X, LocalPlayer.Character.HumanoidRootPart.Position.Y, targetPos.Z)), strength)
-            end
+            -- 同步相機
+            Camera.CFrame = Camera.CFrame:Lerp(CFrame.lookAt(Camera.CFrame.Position, targetPos), strength)
+            -- 同步身體
+            local hrp = LocalPlayer.Character.HumanoidRootPart
+            hrp.CFrame = hrp.CFrame:Lerp(CFrame.new(hrp.Position, Vector3.new(targetPos.X, hrp.Position.Y, targetPos.Z)), strength)
         end
     end
 end)
