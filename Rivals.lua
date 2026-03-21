@@ -1,5 +1,5 @@
 -- ==========================================
--- MUMU RIVALS - 視角與槍口同步版 (修復槍口不跟隨)
+-- MUMU RIVALS - 視角身體同步 + 拖曳 UI 版
 -- ==========================================
 
 local Settings = {
@@ -7,7 +7,7 @@ local Settings = {
     Aimbot = true,
     FOV = 180,           
     Prediction = 0.14,    
-    Smoothness = 0.1,    -- 稍微調高一點，讓槍口轉得夠快
+    Smoothness = 0.1,    
     TeamCheck = false
 }
 
@@ -17,17 +17,24 @@ local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
--- [[ 超大字體 UI ]]
+-- [[ 超大字體 UI 建立 ]]
 local SafeGui = (gethui and gethui()) or game:GetService("CoreGui")
-if SafeGui:FindFirstChild("MUMU_Sync") then SafeGui.MUMU_Sync:Destroy() end
+if SafeGui:FindFirstChild("MUMU_Draggable") then SafeGui.MUMU_Draggable:Destroy() end
+
 local ScreenGui = Instance.new("ScreenGui", SafeGui)
-ScreenGui.Name = "MUMU_Sync"
+ScreenGui.Name = "MUMU_Draggable"
+ScreenGui.ResetOnSpawn = false
+
 local Main = Instance.new("Frame", ScreenGui)
 Main.Size = UDim2.fromOffset(300, 300)
 Main.Position = UDim2.fromScale(0.5, 0.5)
 Main.AnchorPoint = Vector2.new(0.5, 0.5)
 Main.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-Instance.new("UICorner", Main)
+Main.Active = true -- 必須開啟才能拖曳
+Main.Draggable = false -- 我們用自定義腳本替代原生拖曳，更穩
+Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 15)
+Instance.new("UIStroke", Main).Thickness = 4
+
 local Title = Instance.new("TextLabel", Main)
 Title.Size = UDim2.new(1, 0, 0, 80)
 Title.Text = "⚡ MUMU SYNC"
@@ -42,6 +49,33 @@ Container.Position = UDim2.fromScale(0.05, 0.25)
 Container.BackgroundTransparency = 1
 Instance.new("UIListLayout", Container).Padding = UDim.new(0, 20)
 
+-- [[ 1. 絲滑拖曳邏輯 ]]
+local dragging, dragInput, dragStart, startPos
+local function update(input)
+    local delta = input.Position - dragStart
+    Main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+end
+
+Main.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = input.Position
+        startPos = Main.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then dragging = false end
+        end)
+    end
+end)
+
+Main.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement then dragInput = input end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if input == dragInput and dragging then update(input) end
+end)
+
+-- [[ 2. 功能切換 ]]
 local function AddToggle(name, default, callback)
     local state = default
     local btn = Instance.new("TextButton", Container)
@@ -61,14 +95,11 @@ local function AddToggle(name, default, callback)
 end
 
 AddToggle("ESP 透視", Settings.ESP, function(v) Settings.ESP = v end)
-AddToggle("AIM 鎖頭 (同步)", Settings.Aimbot, function(v) Settings.Aimbot = v end)
+AddToggle("AIM 同步鎖頭", Settings.Aimbot, function(v) Settings.Aimbot = v end)
 
--- [[ 核心修復邏輯 ]]
-
+-- [[ 3. 核心鎖頭與同步 ]]
 local function GetTarget()
-    local target = nil
-    local maxDist = Settings.FOV
-    local mousePos = UserInputService:GetMouseLocation()
+    local target, maxDist = nil, Settings.FOV
     for _, p in pairs(Players:GetPlayers()) do
         if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") then
             if Settings.TeamCheck and p.Team == LocalPlayer.Team then continue end
@@ -76,7 +107,7 @@ local function GetTarget()
             if hum and hum.Health > 0 then
                 local pos, onScreen = Camera:WorldToViewportPoint(p.Character.Head.Position)
                 if onScreen then
-                    local dist = (Vector2.new(pos.X, pos.Y) - mousePos).Magnitude
+                    local dist = (Vector2.new(pos.X, pos.Y) - UserInputService:GetMouseLocation()).Magnitude
                     if dist < maxDist then maxDist = dist target = p.Character end
                 end
             end
@@ -95,18 +126,16 @@ RunService.RenderStepped:Connect(function()
         end
     end
 
-    -- 鎖頭 (同步視角與身體)
+    -- 鎖頭 (同步相機與身體)
     if Settings.Aimbot and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
         local target = GetTarget()
         if target and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
             local targetPos = target.Head.Position + (target.HumanoidRootPart.Velocity * Settings.Prediction)
             
-            -- 1. 鎖相機 (眼睛看過去)
-            local lookAt = CFrame.lookAt(Camera.CFrame.Position, targetPos)
-            Camera.CFrame = Camera.CFrame:Lerp(lookAt, Settings.Smoothness)
+            -- 鎖相機
+            Camera.CFrame = Camera.CFrame:Lerp(CFrame.lookAt(Camera.CFrame.Position, targetPos), Settings.Smoothness)
             
-            -- 2. 鎖身體 (槍口指過去) - 這是關鍵！
-            -- 只旋轉 Y 軸（左右），不旋轉 X 軸，防止角色身體倒立
+            -- 鎖身體 (讓槍口指過去)
             local hrp = LocalPlayer.Character.HumanoidRootPart
             local newBodyLook = CFrame.new(hrp.Position, Vector3.new(targetPos.X, hrp.Position.Y, targetPos.Z))
             hrp.CFrame = hrp.CFrame:Lerp(newBodyLook, Settings.Smoothness)
@@ -114,6 +143,7 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
+-- J 鍵顯示/隱藏
 UserInputService.InputBegan:Connect(function(i, g)
     if not g and i.KeyCode == Enum.KeyCode.J then Main.Visible = not Main.Visible end
 end)
