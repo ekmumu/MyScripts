@@ -1,204 +1,126 @@
 -- ==========================================
--- Z3US RIVALS - 專屬優化載入器 (功能修復版)
+-- MUMU RIVALS - 終極兼容修復版 (強制注入)
 -- ==========================================
 
 local Settings = {
     ESP = true,
     Aimbot = true,
-    FOV = 200,           -- 鎖頭範圍大小
-    Smoothness = 0.1,    -- 鎖頭平滑度 (越小越快)
-    TeamCheck = false,   -- 強制設為 false 以確保測試時功能正常
-    ScriptUrl = "https://raw.githubusercontent.com/ekmumu/MyScripts/refs/heads/main/Rivals.lua" 
+    FOV = 250,           
+    Smoothness = 0.05,   
+    TeamCheck = false,   
 }
 
-local CoreGui = game:GetService("CoreGui")
-local TweenService = game:GetService("TweenService")
-local UserInputService = game:GetService("UserInputService")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
--- 確保使用最安全的 UI 容器
-local SafeGui = (gethui and gethui()) or CoreGui
-if SafeGui:FindFirstChild("Z3US_Rivals") then 
-    SafeGui.Z3US_Rivals:Destroy() 
-end
-
-local ScreenGui = Instance.new("ScreenGui", SafeGui)
-ScreenGui.Name = "Z3US_Rivals"
+-- [[ UI 建立與 J 鍵開關 ]]
+local ScreenGui = Instance.new("ScreenGui", (gethui and gethui()) or game:GetService("CoreGui"))
+ScreenGui.Name = "MUMU_Rivals_UI"
 ScreenGui.ResetOnSpawn = false
 
--- [[ UI 建立 ]]
 local Main = Instance.new("Frame", ScreenGui)
-Main.Size = UDim2.fromOffset(320, 360)
+Main.Size = UDim2.fromOffset(280, 200)
 Main.Position = UDim2.fromScale(0.5, 0.5)
 Main.AnchorPoint = Vector2.new(0.5, 0.5)
-Main.BackgroundColor3 = Color3.fromRGB(15, 15, 18)
-Main.BorderSizePixel = 0
-Main.Visible = true
-Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 12)
+Main.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 10)
 
-local Stroke = Instance.new("UIStroke", Main)
-Stroke.Color = Color3.fromRGB(100, 120, 255)
-Stroke.Thickness = 1.5
+local Status = Instance.new("TextLabel", Main)
+Status.Size = UDim2.new(1, 0, 0.6, 0)
+-- 這裡已經幫你修改為 MUMU RIVALS
+Status.Text = "⚡ MUMU RIVALS\nSTATUS: ACTIVE\n[J] 隱藏/顯示\n[右鍵] 鎖頭"
+Status.TextColor3 = Color3.new(1, 1, 1)
+Status.BackgroundTransparency = 1
+Status.TextSize = 18
+Status.Font = Enum.Font.GothamBold
 
-local Title = Instance.new("TextLabel", Main)
-Title.Size = UDim2.new(1, 0, 0, 50)
-Title.BackgroundTransparency = 1
-Title.Text = "⚡ Z3US | RIVALS"
-Title.TextColor3 = Color3.new(1, 1, 1)
-Title.TextSize = 20
-Title.Font = Enum.Font.GothamBold
+local LoadBtn = Instance.new("TextButton", Main)
+LoadBtn.Size = UDim2.new(0.8, 0, 0.3, 0)
+LoadBtn.Position = UDim2.fromScale(0.1, 0.6)
+LoadBtn.BackgroundColor3 = Color3.fromRGB(100, 120, 255)
+LoadBtn.Text = "PRESS TO START"
+LoadBtn.TextColor3 = Color3.new(1, 1, 1)
+Instance.new("UICorner", LoadBtn).CornerRadius = UDim.new(0, 5)
 
-local CloseBtn = Instance.new("TextButton", Main)
-CloseBtn.Size = UDim2.fromOffset(40, 40)
-CloseBtn.Position = UDim2.new(1, -45, 0, 5)
-CloseBtn.BackgroundTransparency = 1
-CloseBtn.Text = "✕"
-CloseBtn.TextColor3 = Color3.fromRGB(150, 150, 150)
-CloseBtn.TextSize = 18
-CloseBtn.Font = Enum.Font.GothamBold
+-- J 鍵控制
+UserInputService.InputBegan:Connect(function(i, g)
+    if not g and i.KeyCode == Enum.KeyCode.J then Main.Visible = not Main.Visible end
+end)
 
-local Content = Instance.new("Frame", Main)
-Content.Size = UDim2.new(0.9, 0, 0.75, 0)
-Content.Position = UDim2.fromScale(0.05, 0.16)
-Content.BackgroundTransparency = 1
-
-local Layout = Instance.new("UIListLayout", Content)
-Layout.Padding = UDim.new(0, 12)
-Layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-
-local function TweenColor(obj, targetColor, duration)
-    TweenService:Create(obj, TweenInfo.new(duration or 0.2), {BackgroundColor3 = targetColor}):Play()
-end
-
-local function CreateToggle(text, defaultValue, callback)
-    local Enabled = defaultValue
-    local Btn = Instance.new("TextButton", Content)
-    Btn.Size = UDim2.new(1, 0, 0, 45)
-    Btn.BackgroundColor3 = Enabled and Color3.fromRGB(100, 120, 255) or Color3.fromRGB(35, 35, 40)
-    Btn.Text = "  " .. text .. ": " .. (Enabled and "ON" or "OFF")
-    Btn.TextColor3 = Color3.new(1, 1, 1)
-    Btn.Font = Enum.Font.GothamSemibold
-    Btn.TextSize = 15
-    Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 8)
+-- [[ 1. 強力 ESP 邏輯 ]]
+local function ApplyESP(p)
+    if p == LocalPlayer then return end
     
-    Btn.MouseButton1Click:Connect(function()
-        Enabled = not Enabled
-        TweenColor(Btn, Enabled and Color3.fromRGB(100, 120, 255) or Color3.fromRGB(35, 35, 40), 0.2)
-        Btn.Text = "  " .. text .. ": " .. (Enabled and "ON" or "OFF")
-        callback(Enabled)
-    end)
-end
-
-CreateToggle("ESP (方框透視)", Settings.ESP, function(v) Settings.ESP = v end)
-CreateToggle("Aimbot (右鍵鎖頭)", Settings.Aimbot, function(v) Settings.Aimbot = v end)
-
-local LoadBtn = Instance.new("TextButton", Content)
-LoadBtn.Size = UDim2.new(1, 0, 0, 55)
-LoadBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
-LoadBtn.Text = "LOAD SCRIPT"
-LoadBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-LoadBtn.Font = Enum.Font.GothamBlack
-LoadBtn.TextSize = 16
-Instance.new("UICorner", LoadBtn).CornerRadius = UDim.new(0, 8)
-
--- ==========================================
--- 修復版功能引擎
--- ==========================================
-
--- 1. 穩定方框 ESP (使用 Drawing API，不會被遊戲刪除)
-local function Start_ESP()
-    local function CreateBox(player)
-        local Box = Drawing.new("Square")
-        Box.Visible = false
-        Box.Color = Color3.fromRGB(255, 50, 50)
-        Box.Thickness = 2
-        Box.Transparency = 1
-        Box.Filled = false
-
-        RunService.RenderStepped:Connect(function()
-            if Settings.ESP and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-                local Root = player.Character.HumanoidRootPart
-                local Pos, OnScreen = Camera:WorldToViewportPoint(Root.Position)
-
-                if OnScreen then
-                    local SizeY = (Camera:WorldToViewportPoint(Root.Position + Vector3.new(0, 3, 0)).Y - Camera:WorldToViewportPoint(Root.Position + Vector3.new(0, -3.5, 0)).Y)
-                    Box.Size = Vector2.new(SizeY / 1.5, SizeY)
-                    Box.Position = Vector2.new(Pos.X - Box.Size.X / 2, Pos.Y - Box.Size.Y / 2)
-                    Box.Visible = true
-                else
-                    Box.Visible = false
-                end
-            else
-                Box.Visible = false
-            end
-            if not player.Parent then Box:Remove() end
-        end)
+    local function Update()
+        local char = p.Character or p.CharacterAdded:Wait()
+        -- 刪除舊的
+        if char:FindFirstChild("MUMU_Highlight") then char.MUMU_Highlight:Destroy() end
+        
+        -- 強制建立新的 Highlight
+        local h = Instance.new("Highlight")
+        h.Name = "MUMU_Highlight"
+        h.Parent = char
+        h.FillColor = Color3.fromRGB(255, 0, 0)
+        h.OutlineColor = Color3.new(1, 1, 1)
+        h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        h.Enabled = Settings.ESP
     end
-    for _, p in pairs(Players:GetPlayers()) do if p ~= LocalPlayer then CreateBox(p) end end
-    Players.PlayerAdded:Connect(function(p) if p ~= LocalPlayer then CreateBox(p) end end)
+    
+    Update()
+    p.CharacterAdded:Connect(Update)
 end
 
--- 2. 強化鎖頭 (優化目標選擇)
-local function Start_Aimbot()
-    RunService.RenderStepped:Connect(function()
-        if Settings.Aimbot and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
-            local Closest = nil
-            local MaxDist = Settings.FOV
-            local MousePos = UserInputService:GetMouseLocation()
-
-            for _, p in pairs(Players:GetPlayers()) do
-                if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") then
-                    -- 檢查血量
-                    local hum = p.Character:FindFirstChildOfClass("Humanoid")
-                    if hum and hum.Health > 0 then
-                        local Pos, OnScreen = Camera:WorldToViewportPoint(p.Character.Head.Position)
-                        if OnScreen then
-                            local Dist = (Vector2.new(Pos.X, Pos.Y) - MousePos).Magnitude
-                            if Dist < MaxDist then
-                                MaxDist = Dist
-                                Closest = p.Character.Head
-                            end
-                        end
+-- [[ 2. 強制鎖頭邏輯 ]]
+local function GetClosest()
+    local target = nil
+    local dist = Settings.FOV
+    
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") then
+            -- 檢查活著
+            local hum = p.Character:FindFirstChildOfClass("Humanoid")
+            if hum and hum.Health > 0 then
+                local pos, onScreen = Camera:WorldToViewportPoint(p.Character.Head.Position)
+                if onScreen then
+                    local mag = (Vector2.new(pos.X, pos.Y) - UserInputService:GetMouseLocation()).Magnitude
+                    if mag < dist then
+                        dist = mag
+                        target = p.Character.Head
                     end
                 end
             end
+        end
+    end
+    return target
+end
 
-            if Closest then
-                local LookAt = CFrame.new(Camera.CFrame.Position, Closest.Position)
-                Camera.CFrame = Camera.CFrame:Lerp(LookAt, Settings.Smoothness)
+-- [[ 啟動功能 ]]
+LoadBtn.MouseButton1Click:Connect(function()
+    LoadBtn.Text = "RUNNING..."
+    LoadBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 100)
+    
+    -- 啟動 ESP
+    for _, p in pairs(Players:GetPlayers()) do ApplyESP(p) end
+    Players.PlayerAdded:Connect(ApplyESP)
+    
+    -- 啟動鎖頭
+    RunService.RenderStepped:Connect(function()
+        if Settings.Aimbot and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
+            local t = GetClosest()
+            if t then
+                Camera.CFrame = CFrame.new(Camera.CFrame.Position, t.Position)
             end
         end
     end)
-end
-
--- ==========================================
--- 核心事件
--- ==========================================
-
-LoadBtn.MouseButton1Click:Connect(function()
-    LoadBtn.Text = "Loading..."
-    Start_ESP()
-    Start_Aimbot()
-    task.spawn(function()
-        pcall(function() loadstring(game:HttpGet(Settings.ScriptUrl))() end)
-        LoadBtn.Text = "✅ READY [Press J]"
-        task.wait(1)
-        Main.Visible = false 
-    end)
+    
+    task.wait(1)
+    Main.Visible = false
 end)
 
-UserInputService.InputBegan:Connect(function(input, gp)
-    if not gp and input.KeyCode == Enum.KeyCode.J then
-        Main.Visible = not Main.Visible
-    end
-end)
-
-CloseBtn.MouseButton1Click:Connect(function() Main.Visible = false end)
-
--- 拖曳功能 (簡化)
+-- 拖曳功能
 local d, ds, sp
 Main.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then d = true ds = i.Position sp = Main.Position end end)
 UserInputService.InputChanged:Connect(function(i) if d and i.UserInputType == Enum.UserInputType.MouseMovement then local delta = i.Position - ds Main.Position = UDim2.new(sp.X.Scale, sp.X.Offset + delta.X, sp.Y.Scale, sp.Y.Offset + delta.Y) end end)
