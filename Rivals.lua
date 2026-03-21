@@ -1,16 +1,15 @@
 -- ==========================================
--- MUMU RIVALS - 功能分離 + 子彈轉彎 (Silent Aim)
+-- MUMU RIVALS - 修正 J 鍵與拖曳功能
 -- ==========================================
 
 local Settings = {
     ESP = true,
-    SmoothAim = true,    -- 右鍵絲滑瞄準
-    SnapLock = true,     -- 開槍瞬間鎖頭
-    SilentAim = true,    -- ⚡ 子彈轉彎 (吸附)
-    
+    SmoothAim = true,    
+    SnapLock = true,     
+    SilentAim = true,    
     FOV = 200,
     MaxDistance = 300,
-    SmoothValue = 0.08,  -- 絲滑度
+    SmoothValue = 0.08,  
     Prediction = 0.15,
     WallCheck = true
 }
@@ -23,15 +22,16 @@ local Camera = workspace.CurrentCamera
 
 -- [[ UI 建立 ]]
 local SafeGui = (gethui and gethui()) or game:GetService("CoreGui")
-if SafeGui:FindFirstChild("MUMU_ULTRA") then SafeGui.MUMU_ULTRA:Destroy() end
+if SafeGui:FindFirstChild("MUMU_REFIX") then SafeGui.MUMU_REFIX:Destroy() end
 local ScreenGui = Instance.new("ScreenGui", SafeGui)
-ScreenGui.Name = "MUMU_ULTRA"
+ScreenGui.Name = "MUMU_REFIX"
 
 local Main = Instance.new("Frame", ScreenGui)
-Main.Size = UDim2.fromOffset(380, 520) -- 視窗加大
-Main.Position = UDim2.fromScale(0.5, 0.5)
+Main.Size = UDim2.fromOffset(380, 520)
+Main.Position = UDim2.fromScale(0.5, 0.4) -- 初始位置偏上一點
 Main.AnchorPoint = Vector2.new(0.5, 0.5)
 Main.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+Main.Active = true -- 必須開啟以支援拖曳
 Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 15)
 local Stroke = Instance.new("UIStroke", Main)
 Stroke.Thickness = 4
@@ -39,7 +39,7 @@ Stroke.Color = Color3.fromRGB(255, 50, 50)
 
 local Title = Instance.new("TextLabel", Main)
 Title.Size = UDim2.new(1, 0, 0, 70)
-Title.Text = "⚡ MUMU ULTRA V7"
+Title.Text = "⚡ MUMU ULTRA V7.1"
 Title.TextSize = 30
 Title.Font = Enum.Font.GothamBlack
 Title.TextColor3 = Color3.new(1, 1, 1)
@@ -51,6 +51,39 @@ Container.Position = UDim2.fromScale(0.05, 0.15)
 Container.BackgroundTransparency = 1
 Instance.new("UIListLayout", Container).Padding = UDim.new(0, 10)
 
+-- [[ 1. 補回：流暢拖曳腳本 ]]
+local dragging, dragInput, dragStart, startPos
+local function update(input)
+    local delta = input.Position - dragStart
+    Main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+end
+
+Main.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = input.Position
+        startPos = Main.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then dragging = false end
+        end)
+    end
+end)
+
+Main.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement then dragInput = input end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if input == dragInput and dragging then update(input) end
+end)
+
+-- [[ 2. 補回：J 鍵隱藏功能 ]]
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if not gameProcessed and input.KeyCode == Enum.KeyCode.J then
+        Main.Visible = not Main.Visible
+    end
+end)
+
 -- [[ 按鈕生成器 ]]
 local function AddToggle(name, default, callback)
     local state = default
@@ -58,7 +91,7 @@ local function AddToggle(name, default, callback)
     btn.Size = UDim2.new(1, 0, 0, 55)
     btn.BackgroundColor3 = state and Color3.fromRGB(255, 50, 50) or Color3.fromRGB(40, 40, 40)
     btn.Text = "  " .. name .. ": " .. (state and "ON" or "OFF")
-    btn.TextSize = 20
+    btn.TextSize = 22 -- 確保字體超大
     btn.Font = Enum.Font.GothamBold
     btn.TextColor3 = Color3.new(1, 1, 1)
     btn.TextXAlignment = Enum.TextXAlignment.Left
@@ -78,17 +111,7 @@ AddToggle("射擊瞬間鎖頭", Settings.SnapLock, function(v) Settings.SnapLock
 AddToggle("子彈轉彎吸附", Settings.SilentAim, function(v) Settings.SilentAim = v end)
 AddToggle("隔牆檢查", Settings.WallCheck, function(v) Settings.WallCheck = v end)
 
--- [[ 核心邏輯區 ]]
-
-local function IsVisible(part, character)
-    if not Settings.WallCheck then return true end
-    local params = RaycastParams.new()
-    params.FilterType = Enum.RaycastFilterType.Exclude
-    params.FilterDescendantsInstances = {LocalPlayer.Character, Camera}
-    local result = workspace:Raycast(Camera.CFrame.Position, part.Position - Camera.CFrame.Position, params)
-    return result == nil or result.Instance:IsDescendantOf(character)
-end
-
+-- [[ 核心邏輯 (Silent Aim & Aimbot) ]]
 local function GetTarget()
     local target, maxDist = nil, Settings.FOV
     for _, p in pairs(Players:GetPlayers()) do
@@ -98,35 +121,28 @@ local function GetTarget()
             local pos, onScreen = Camera:WorldToViewportPoint(p.Character.Head.Position)
             if onScreen then
                 local mDist = (Vector2.new(pos.X, pos.Y) - UserInputService:GetMouseLocation()).Magnitude
-                if mDist < maxDist and IsVisible(p.Character.Head, p.Character) then
-                    maxDist = mDist
-                    target = p.Character
-                end
+                if mDist < maxDist then target = p.Character maxDist = mDist end
             end
         end
     end
     return target
 end
 
--- ⚡ 3. 子彈轉彎 (Silent Aim) 攔截技術
+-- 子彈轉彎攔截
 local oldNamecall
 oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
     local args = {...}
     local method = getnamecallmethod()
-    
     if Settings.SilentAim and method == "Raycast" and not checkcaller() then
         local t = GetTarget()
-        if t then
-            args[2] = (t.Head.Position - args[1]).Unit * 1000 -- 強制將射線方向改向敵人頭部
-            return oldNamecall(self, unpack(args))
-        end
+        if t then args[2] = (t.Head.Position - args[1]).Unit * 1000 return oldNamecall(self, unpack(args)) end
     end
     return oldNamecall(self, ...)
 end)
 
--- [[ 每一幀執行更新 ]]
+-- 每一幀更新
 RunService.RenderStepped:Connect(function()
-    -- ESP 更新
+    -- ESP
     if Settings.ESP then
         for _, p in pairs(Players:GetPlayers()) do
             if p ~= LocalPlayer and p.Character and not p.Character:FindFirstChild("MUMU_H") then
@@ -135,29 +151,18 @@ RunService.RenderStepped:Connect(function()
         end
     end
 
-    -- 瞄準邏輯
-    local t = GetTarget()
-    if t and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
-        local targetPos = t.Head.Position + (t.HumanoidRootPart.Velocity * Settings.Prediction)
-        local isFiring = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1)
-        
-        local strength = 0
-        if isFiring and Settings.SnapLock then
-            strength = 1.0 -- 瞬鎖
-        elseif Settings.SmoothAim then
-            strength = Settings.SmoothValue -- 絲滑
-        end
-
-        if strength > 0 then
-            Camera.CFrame = Camera.CFrame:Lerp(CFrame.lookAt(Camera.CFrame.Position, targetPos), strength)
-            LocalPlayer.Character.HumanoidRootPart.CFrame = LocalPlayer.Character.HumanoidRootPart.CFrame:Lerp(CFrame.new(LocalPlayer.Character.HumanoidRootPart.Position, Vector3.new(targetPos.X, LocalPlayer.Character.HumanoidRootPart.Position.Y, targetPos.Z)), strength)
+    -- 瞄準
+    if UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
+        local t = GetTarget()
+        if t then
+            local targetPos = t.Head.Position + (t.HumanoidRootPart.Velocity * Settings.Prediction)
+            local isFiring = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1)
+            local strength = (isFiring and Settings.SnapLock) and 1.0 or (Settings.SmoothAim and Settings.SmoothValue or 0)
+            
+            if strength > 0 then
+                Camera.CFrame = Camera.CFrame:Lerp(CFrame.lookAt(Camera.CFrame.Position, targetPos), strength)
+                LocalPlayer.Character.HumanoidRootPart.CFrame = LocalPlayer.Character.HumanoidRootPart.CFrame:Lerp(CFrame.new(LocalPlayer.Character.HumanoidRootPart.Position, Vector3.new(targetPos.X, LocalPlayer.Character.HumanoidRootPart.Position.Y, targetPos.Z)), strength)
+            end
         end
     end
 end)
-
--- UI 拖曳與 J 鍵控制
-local d, ds, sp
-Main.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then d = true ds = i.Position sp = Main.Position end end)
-UserInputService.InputChanged:Connect(function(i) if d and i.UserInputType == Enum.UserInputType.MouseMovement then local delta = i.Position - ds Main.Position = UDim2.new(sp.X.Scale, sp.X.Offset + delta.X, sp.Y.Scale, sp.Y.Offset + delta.Y) end end)
-UserInputService.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then d = false end end)
-UserInputService.InputBegan:Connect(function(i, g) if not g and i.KeyCode == Enum.KeyCode.J then Main.Visible = not Main.Visible end end)
