@@ -1,42 +1,41 @@
 -- ==========================================
--- Z3US RIVALS - 專屬優化載入器 (內建 ESP 版)
+-- Z3US RIVALS - 最終整合版 (ESP + Aimbot)
 -- ==========================================
 
 local Settings = {
-    Autoload = true,
+    Autoload = true,    -- ESP 開關
+    Aimbot = true,      -- 鎖頭開關
     Silentload = false,
-    -- 這裡連結到你 GitHub 上其他的擴充功能 (如有需要)
     ScriptUrl = "https://raw.githubusercontent.com/ekmumu/MyScripts/refs/heads/main/Rivals.lua" 
 }
 
 local CoreGui = game:GetService("CoreGui")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
 
--- 確保使用最安全的 UI 容器
+-- 確保 UI 唯一性
 local SafeGui = (gethui and gethui()) or CoreGui
-if SafeGui:FindFirstChild("Z3US_Rivals") then 
-    SafeGui.Z3US_Rivals:Destroy() 
-end
+if SafeGui:FindFirstChild("Z3US_Rivals") then SafeGui.Z3US_Rivals:Destroy() end
 
 local ScreenGui = Instance.new("ScreenGui", SafeGui)
 ScreenGui.Name = "Z3US_Rivals"
 
 -- [[ UI 建立 ]]
 local Main = Instance.new("Frame", ScreenGui)
-Main.Size = UDim2.fromOffset(320, 360)
+Main.Size = UDim2.fromOffset(320, 420) -- 稍微拉長一點放按鈕
 Main.Position = UDim2.fromScale(0.5, 0.5)
 Main.AnchorPoint = Vector2.new(0.5, 0.5)
 Main.BackgroundColor3 = Color3.fromRGB(15, 15, 18)
 Main.BorderSizePixel = 0
 Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 12)
-
 local Stroke = Instance.new("UIStroke", Main)
 Stroke.Color = Color3.fromRGB(100, 120, 255)
 Stroke.Thickness = 1.5
 
--- 標題列
 local Title = Instance.new("TextLabel", Main)
 Title.Size = UDim2.new(1, 0, 0, 50)
 Title.BackgroundTransparency = 1
@@ -53,141 +52,111 @@ CloseBtn.Text = "✕"
 CloseBtn.TextColor3 = Color3.fromRGB(150, 150, 150)
 CloseBtn.TextSize = 18
 CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.MouseButton1Click:Connect(function() ScreenGui:Destroy() end)
 
--- 內容排版
 local Content = Instance.new("Frame", Main)
 Content.Size = UDim2.new(0.9, 0, 0.75, 0)
 Content.Position = UDim2.fromScale(0.05, 0.16)
 Content.BackgroundTransparency = 1
-
 local Layout = Instance.new("UIListLayout", Content)
-Layout.Padding = UDim.new(0, 12)
+Layout.Padding = UDim.new(0, 10)
 Layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 
--- 動畫輔助函數
-local function TweenColor(obj, targetColor, duration)
-    TweenService:Create(obj, TweenInfo.new(duration or 0.2), {BackgroundColor3 = targetColor}):Play()
-end
-
--- [[ 開關按鈕產生器 ]]
+-- [[ 按鈕產生器 ]]
 local function CreateToggle(text, defaultValue, callback)
     local Enabled = defaultValue
-    local ColorOn = Color3.fromRGB(100, 120, 255)
-    local ColorOff = Color3.fromRGB(35, 35, 40)
-    
     local Btn = Instance.new("TextButton", Content)
-    Btn.Size = UDim2.new(1, 0, 0, 45)
-    Btn.BackgroundColor3 = Enabled and ColorOn or ColorOff
+    Btn.Size = UDim2.new(1, 0, 0, 40)
+    Btn.BackgroundColor3 = Enabled and Color3.fromRGB(100, 120, 255) or Color3.fromRGB(35, 35, 40)
     Btn.Text = "  " .. text .. ": " .. (Enabled and "ON" or "OFF")
     Btn.TextColor3 = Color3.new(1, 1, 1)
     Btn.Font = Enum.Font.GothamSemibold
-    Btn.TextSize = 15
-    Btn.AutoButtonColor = false
+    Btn.TextSize = 14
     Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 8)
     
     Btn.MouseButton1Click:Connect(function()
         Enabled = not Enabled
-        TweenColor(Btn, Enabled and ColorOn or ColorOff, 0.2)
+        Btn.BackgroundColor3 = Enabled and Color3.fromRGB(100, 120, 255) or Color3.fromRGB(35, 35, 40)
         Btn.Text = "  " .. text .. ": " .. (Enabled and "ON" or "OFF")
         callback(Enabled)
     end)
 end
 
-CreateToggle("Autoload", Settings.Autoload, function(v) Settings.Autoload = v end)
-CreateToggle("Silentload", Settings.Silentload, function(v) Settings.Silentload = v end)
+CreateToggle("ESP (透視)", Settings.Autoload, function(v) Settings.Autoload = v end)
+CreateToggle("Aimbot (鎖頭)", Settings.Aimbot, function(v) Settings.Aimbot = v end)
 
--- [[ 載入按鈕 ]]
 local LoadBtn = Instance.new("TextButton", Content)
-LoadBtn.Size = UDim2.new(1, 0, 0, 55)
+LoadBtn.Size = UDim2.new(1, 0, 0, 50)
 LoadBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
-LoadBtn.Text = "LOAD SCRIPT"
-LoadBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+LoadBtn.Text = "LOAD ALL FUNCTIONS"
+LoadBtn.TextColor3 = Color3.new(1, 1, 1)
 LoadBtn.Font = Enum.Font.GothamBlack
-LoadBtn.TextSize = 16
-LoadBtn.AutoButtonColor = false
 Instance.new("UICorner", LoadBtn).CornerRadius = UDim.new(0, 8)
 
-LoadBtn.MouseEnter:Connect(function() TweenColor(LoadBtn, Color3.fromRGB(60, 60, 65), 0.2) end)
-LoadBtn.MouseLeave:Connect(function() TweenColor(LoadBtn, Color3.fromRGB(45, 45, 50), 0.2) end)
-
--- [[ 內建功能區: ESP 透視 ]]
-local function Internal_ESP()
-    local function ApplyESP(player)
-        if player == Players.LocalPlayer then return end
-        local function CreateHighlight(character)
-            if not character:FindFirstChild("Z3US_ESP") then
-                local highlight = Instance.new("Highlight")
-                highlight.Name = "Z3US_ESP"
-                highlight.Parent = character
-                highlight.FillColor = Color3.fromRGB(255, 80, 80)
-                highlight.FillTransparency = 0.5
-                highlight.OutlineColor = Color3.new(1, 1, 1)
-                highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-            end
-        end
-        if player.Character then CreateHighlight(player.Character) end
-        player.CharacterAdded:Connect(CreateHighlight)
+-- [[ 功能 1: ESP 透視 ]]
+local function Start_ESP()
+    local function Apply(p)
+        if p == LocalPlayer then return end
+        p.CharacterAdded:Connect(function(c)
+            local h = Instance.new("Highlight", c)
+            h.FillColor = Color3.fromRGB(255, 80, 80)
+            h.OutlineColor = Color3.new(1, 1, 1)
+            h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        end)
     end
-    for _, p in pairs(Players:GetPlayers()) do ApplyESP(p) end
-    Players.PlayerAdded:Connect(ApplyESP)
+    for _, p in pairs(Players:GetPlayers()) do Apply(p) end
+    Players.PlayerAdded:Connect(Apply)
 end
 
--- [[ 核心邏輯 ]]
-LoadBtn.MouseButton1Click:Connect(function()
-    TweenColor(LoadBtn, Color3.fromRGB(100, 120, 255), 0.1)
-    LoadBtn.Text = "Loading..."
+-- [[ 功能 2: Aimbot 鎖頭核心 ]]
+local function Start_Aimbot()
+    local Smoothness = 0.15 -- 數值越小越順，數值大鎖越死
     
-    -- 寫入全域變數
-    getgenv().autoload = Settings.Autoload
-    getgenv().silentload = Settings.Silentload
-    getgenv().SCRIPT_KEY = ""
-    
-    task.spawn(function()
-        -- 1. 執行內建透視
-        if Settings.Autoload then
-            Internal_ESP()
-        end
-
-        -- 2. 嘗試從外部載入額外腳本 (例如鎖頭)
-        local success, err = pcall(function()
-            loadstring(game:HttpGet(Settings.ScriptUrl))()
-        end)
+    local function GetClosestPlayer()
+        local Target = nil
+        local MaxDist = math.huge
         
-        if success then
-            TweenColor(LoadBtn, Color3.fromRGB(50, 200, 100), 0.2)
-            LoadBtn.Text = "✅ SUCCESS"
-            task.wait(1.5)
-            ScreenGui:Destroy()
-        else
-            -- 如果外部載入失敗但內建 ESP 跑成功了，我們還是顯示成功
-            TweenColor(LoadBtn, Color3.fromRGB(50, 200, 100), 0.2)
-            LoadBtn.Text = "✅ SUCCESS (Local)"
-            warn("外部載入失敗，僅啟動內建功能: " .. tostring(err))
-            task.wait(1.5)
-            ScreenGui:Destroy()
+        for _, p in pairs(Players:GetPlayers()) do
+            if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") then
+                -- 簡單判斷血量 (如有需要可加入)
+                local Pos, OnScreen = Camera:WorldToViewportPoint(p.Character.Head.Position)
+                if OnScreen then
+                    local Dist = (Vector2.new(Pos.X, Pos.Y) - UserInputService:GetMouseLocation()).Magnitude
+                    if Dist < MaxDist then
+                        MaxDist = Dist
+                        Target = p.Character.Head
+                    end
+                end
+            end
+        end
+        return Target
+    end
+
+    RunService.RenderStepped:Connect(function()
+        if Settings.Aimbot and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then -- 按住右鍵鎖頭
+            local Target = GetClosestPlayer()
+            if Target then
+                Camera.CFrame = Camera.CFrame:Lerp(CFrame.new(Camera.CFrame.Position, Target.Position), Smoothness)
+            end
         end
     end)
+end
+
+-- [[ 核心加載 ]]
+LoadBtn.MouseButton1Click:Connect(function()
+    LoadBtn.Text = "Loading..."
+    if Settings.Autoload then Start_ESP() end
+    if Settings.Aimbot then Start_Aimbot() end
+    
+    pcall(function() loadstring(game:HttpGet(Settings.ScriptUrl))() end)
+    
+    LoadBtn.Text = "✅ SUCCESS"
+    task.wait(1)
+    ScreenGui:Destroy()
 end)
 
-CloseBtn.MouseButton1Click:Connect(function() ScreenGui:Destroy() end)
-
--- [[ 絲滑拖曳功能 ]]
-local dragging, dragInput, dragStart, startPos
-Main.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        dragging = true
-        dragStart = input.Position
-        startPos = Main.Position
-    end
-end)
-UserInputService.InputChanged:Connect(function(input)
-    if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-        local delta = input.Position - dragStart
-        Main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-    end
-end)
-UserInputService.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        dragging = false
-    end
-end)
+-- 拖曳功能
+local dragging, dragStart, startPos
+Main.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = true dragStart = i.Position startPos = Main.Position end end)
+UserInputService.InputChanged:Connect(function(i) if dragging and i.UserInputType == Enum.UserInputType.MouseMovement then local d = i.Position - dragStart Main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y) end end)
+UserInputService.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end end)
