@@ -1,19 +1,20 @@
 -- ==========================================
--- Z3US RIVALS - 專屬優化載入器 (Xeno 優化版)
+-- Z3US RIVALS - 專屬優化載入器 (內建 ESP 版)
 -- ==========================================
 
 local Settings = {
     Autoload = true,
     Silentload = false,
-    -- 這裡放你真正要執行的 RIVALS 腳本網址 (你原本用的是 Test.lua)
-    ScriptUrl = "https://raw.githubusercontent.com/blackowl1231/Z3US/refs/heads/main/Games/Test.lua" 
+    -- 這裡連結到你 GitHub 上其他的擴充功能 (如有需要)
+    ScriptUrl = "https://raw.githubusercontent.com/ekmumu/MyScripts/refs/heads/main/Rivals.lua" 
 }
 
 local CoreGui = game:GetService("CoreGui")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
+local Players = game:GetService("Players")
 
--- 確保使用最安全的 UI 容器 (支援 Xeno 等高階執行器)
+-- 確保使用最安全的 UI 容器
 local SafeGui = (gethui and gethui()) or CoreGui
 if SafeGui:FindFirstChild("Z3US_Rivals") then 
     SafeGui.Z3US_Rivals:Destroy() 
@@ -109,6 +110,28 @@ Instance.new("UICorner", LoadBtn).CornerRadius = UDim.new(0, 8)
 LoadBtn.MouseEnter:Connect(function() TweenColor(LoadBtn, Color3.fromRGB(60, 60, 65), 0.2) end)
 LoadBtn.MouseLeave:Connect(function() TweenColor(LoadBtn, Color3.fromRGB(45, 45, 50), 0.2) end)
 
+-- [[ 內建功能區: ESP 透視 ]]
+local function Internal_ESP()
+    local function ApplyESP(player)
+        if player == Players.LocalPlayer then return end
+        local function CreateHighlight(character)
+            if not character:FindFirstChild("Z3US_ESP") then
+                local highlight = Instance.new("Highlight")
+                highlight.Name = "Z3US_ESP"
+                highlight.Parent = character
+                highlight.FillColor = Color3.fromRGB(255, 80, 80)
+                highlight.FillTransparency = 0.5
+                highlight.OutlineColor = Color3.new(1, 1, 1)
+                highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+            end
+        end
+        if player.Character then CreateHighlight(player.Character) end
+        player.CharacterAdded:Connect(CreateHighlight)
+    end
+    for _, p in pairs(Players:GetPlayers()) do ApplyESP(p) end
+    Players.PlayerAdded:Connect(ApplyESP)
+end
+
 -- [[ 核心邏輯 ]]
 LoadBtn.MouseButton1Click:Connect(function()
     TweenColor(LoadBtn, Color3.fromRGB(100, 120, 255), 0.1)
@@ -117,25 +140,31 @@ LoadBtn.MouseButton1Click:Connect(function()
     -- 寫入全域變數
     getgenv().autoload = Settings.Autoload
     getgenv().silentload = Settings.Silentload
-    getgenv().SCRIPT_KEY = "" -- 配合你原本的設定
+    getgenv().SCRIPT_KEY = ""
     
     task.spawn(function()
+        -- 1. 執行內建透視
+        if Settings.Autoload then
+            Internal_ESP()
+        end
+
+        -- 2. 嘗試從外部載入額外腳本 (例如鎖頭)
         local success, err = pcall(function()
             loadstring(game:HttpGet(Settings.ScriptUrl))()
         end)
         
         if success then
-            TweenColor(LoadBtn, Color3.fromRGB(50, 200, 100), 0.2) -- 成功變綠色
+            TweenColor(LoadBtn, Color3.fromRGB(50, 200, 100), 0.2)
             LoadBtn.Text = "✅ SUCCESS"
             task.wait(1.5)
             ScreenGui:Destroy()
         else
-            TweenColor(LoadBtn, Color3.fromRGB(255, 60, 60), 0.2) -- 失敗變紅色
-            LoadBtn.Text = "❌ ERROR"
-            warn("腳本載入失敗: " .. tostring(err))
-            task.wait(2)
-            TweenColor(LoadBtn, Color3.fromRGB(45, 45, 50), 0.2)
-            LoadBtn.Text = "LOAD SCRIPT"
+            -- 如果外部載入失敗但內建 ESP 跑成功了，我們還是顯示成功
+            TweenColor(LoadBtn, Color3.fromRGB(50, 200, 100), 0.2)
+            LoadBtn.Text = "✅ SUCCESS (Local)"
+            warn("外部載入失敗，僅啟動內建功能: " .. tostring(err))
+            task.wait(1.5)
+            ScreenGui:Destroy()
         end
     end)
 end)
@@ -144,7 +173,6 @@ CloseBtn.MouseButton1Click:Connect(function() ScreenGui:Destroy() end)
 
 -- [[ 絲滑拖曳功能 ]]
 local dragging, dragInput, dragStart, startPos
-
 Main.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 then
         dragging = true
@@ -152,14 +180,12 @@ Main.InputBegan:Connect(function(input)
         startPos = Main.Position
     end
 end)
-
 UserInputService.InputChanged:Connect(function(input)
     if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
         local delta = input.Position - dragStart
         Main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
     end
 end)
-
 UserInputService.InputEnded:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 then
         dragging = false
