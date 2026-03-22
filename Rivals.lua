@@ -1,5 +1,5 @@
 -- ==========================================
--- MUMU RIVALS - 衝突修復 + 絕對瞬鎖版
+-- MUMU RIVALS - 物理滑鼠死鎖 (完美跟槍版)
 -- ==========================================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -14,17 +14,18 @@ local Settings = {
     WallCheck = true,  
     Prediction = 0.12, 
     FOV = 250,
-    MaxDistance = 350
+    MaxDistance = 350,
+    Smoothness = 0.8 -- ⚡ 物理移動靈敏度 (0.8 = 近乎瞬鎖且不飄)
 }
 
--- [[ 1. UI 絕對中心固定建立 ]]
+-- [[ 1. 絕對中心固定 UI ]]
 local SafeGui = (gethui and gethui()) or game:GetService("CoreGui")
-if SafeGui:FindFirstChild("MUMU_FIXED") then
-    SafeGui.MUMU_FIXED:Destroy()
+if SafeGui:FindFirstChild("MUMU_PHYSICS_LOCK") then
+    SafeGui.MUMU_PHYSICS_LOCK:Destroy()
 end
 
 local ScreenGui = Instance.new("ScreenGui", SafeGui)
-ScreenGui.Name = "MUMU_FIXED"
+ScreenGui.Name = "MUMU_PHYSICS_LOCK"
 ScreenGui.ResetOnSpawn = false
 
 local Main = Instance.new("Frame", ScreenGui)
@@ -38,8 +39,8 @@ Instance.new("UIStroke", Main).Color = Color3.fromRGB(255, 0, 0)
 
 local Title = Instance.new("TextLabel", Main)
 Title.Size = UDim2.new(1, 0, 0, 70)
-Title.Text = "⚡ MUMU INSTANT"
-Title.TextSize = 26
+Title.Text = "⚡ MUMU CORE"
+Title.TextSize = 30
 Title.Font = Enum.Font.GothamBlack
 Title.TextColor3 = Color3.new(1, 1, 1)
 Title.BackgroundTransparency = 1
@@ -70,7 +71,7 @@ local function AddToggle(name, settingKey)
 end
 
 AddToggle("方框透視 (Box)", "ESP")
-AddToggle("絕對瞬鎖 (右鍵)", "Aimbot")
+AddToggle("物理死鎖 (右鍵)", "Aimbot")
 AddToggle("不瞄隊友 (Team)", "TeamCheck")
 AddToggle("隔牆不瞄 (Wall)", "WallCheck")
 
@@ -90,7 +91,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
     end
 end)
 
--- [[ 3. ⚡ 完美修復：隔牆檢測邏輯 ]]
+-- [[ 3. 過濾邏輯 ]]
 local function IsVisible(targetChar)
     if not Settings.WallCheck then return true end
     if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("Head") then return true end
@@ -106,26 +107,20 @@ local function IsVisible(targetChar)
     local result = workspace:Raycast(origin, targetPos - origin, rayParams)
     
     if result then
-        if result.Instance:IsDescendantOf(targetChar) then
-            return true -- 打到敵人身上，看得到
-        else
-            return false -- 打到牆壁或其他東西，看不到
-        end
+        if result.Instance:IsDescendantOf(targetChar) then return true else return false end
     end
     return true
 end
 
--- [[ 4. ⚡ 完美修復：隊伍過濾邏輯 ]]
 local function IsTeammate(p)
     if not Settings.TeamCheck then return false end
-    -- 確保雙方都有隊伍，且不是 nil，才進行對比 (解決 FFA 模式全被過濾的 Bug)
     if p.Team ~= nil and LocalPlayer.Team ~= nil then
         return p.Team == LocalPlayer.Team
     end
     return false
 end
 
--- [[ 5. 穩定的方框透視 ]]
+-- [[ 4. 方框透視 ]]
 local ESP_Boxes = {}
 local function UpdateESP()
     for _, p in pairs(Players:GetPlayers()) do
@@ -141,7 +136,6 @@ local function UpdateESP()
             local box = ESP_Boxes[p]
             if Settings.ESP and p.Character and p.Character:FindFirstChild("HumanoidRootPart") and p.Character:FindFirstChild("Head") and p.Character:FindFirstChild("Humanoid") and p.Character.Humanoid.Health > 0 then
                 
-                -- 過濾隊友
                 if IsTeammate(p) then box.Visible = false continue end
                 
                 local dist = (Camera.CFrame.Position - p.Character.HumanoidRootPart.Position).Magnitude
@@ -155,33 +149,24 @@ local function UpdateESP()
                         box.Size = Vector2.new(width, height)
                         box.Position = Vector2.new(topPos.X - width/2, topPos.Y)
                         box.Visible = true
-                    else
-                        box.Visible = false
-                    end
-                else
-                    box.Visible = false 
-                end
-            else
-                box.Visible = false
-            end
+                    else box.Visible = false end
+                else box.Visible = false end
+            else box.Visible = false end
         end
     end
 end
 
--- [[ 6. 暴力瞬鎖核心 ]]
-local function GetTarget()
+-- [[ 5. ⚡ 核心：物理模擬 + 死鎖記憶 ]]
+local LockedTarget = nil 
+
+local function FindNewTarget()
     local target, maxDist = nil, Settings.FOV
     local mousePos = UserInputService:GetMouseLocation()
     for _, p in pairs(Players:GetPlayers()) do
         if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") and p.Character:FindFirstChild("Humanoid") and p.Character.Humanoid.Health > 0 then
             
-            -- 過濾隊友
             if IsTeammate(p) then continue end
-            
-            -- 過濾遠方 (別場的敵人)
             if (Camera.CFrame.Position - p.Character.HumanoidRootPart.Position).Magnitude > Settings.MaxDistance then continue end
-            
-            -- 過濾牆壁
             if not IsVisible(p.Character) then continue end
 
             local pos, onScreen = Camera:WorldToViewportPoint(p.Character.Head.Position)
@@ -195,25 +180,52 @@ local function GetTarget()
 end
 
 RunService.RenderStepped:Connect(function()
-    pcall(function()
-        UpdateESP()
+    UpdateESP()
 
-        if Settings.Aimbot and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
-            local target = GetTarget()
-            if target and target:FindFirstChild("Head") then
-                local headPos = target.Head.Position + (target.HumanoidRootPart.Velocity * Settings.Prediction)
-                
-                -- ⚡ 絕對瞬鎖：強行鎖定攝影機座標 + 同步角色身體 (確保槍口跟上)
-                -- 捨棄 mousemoverel 以防止鏡頭旋轉過猛，改用最穩定的一幀硬轉
-                Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, headPos)
-                
-                local hrp = LocalPlayer.Character.HumanoidRootPart
-                hrp.CFrame = CFrame.new(hrp.Position, Vector3.new(headPos.X, hrp.Position.Y, headPos.Z))
-            end
+    if Settings.Aimbot and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
+        
+        -- 如果沒有鎖定目標，尋找一個新的
+        if not LockedTarget then
+            LockedTarget = FindNewTarget()
         end
-    end)
+
+        -- 如果已經有鎖定目標，持續追蹤他
+        if LockedTarget and LockedTarget:FindFirstChild("Head") and LockedTarget:FindFirstChild("Humanoid") and LockedTarget.Humanoid.Health > 0 then
+            
+            -- 檢查是否跑太遠或被牆擋住
+            if (Camera.CFrame.Position - LockedTarget.HumanoidRootPart.Position).Magnitude > Settings.MaxDistance or not IsVisible(LockedTarget) then
+                LockedTarget = nil 
+                return
+            end
+
+            -- 計算目標在螢幕上的位置
+            local headPos = LockedTarget.Head.Position + (LockedTarget.HumanoidRootPart.Velocity * Settings.Prediction)
+            local screenPos, onScreen = Camera:WorldToViewportPoint(headPos)
+            
+            if onScreen then
+                local mousePos = UserInputService:GetMouseLocation()
+                
+                -- ⚡ 物理模擬滑鼠移動 (確保槍管跟上)
+                if mousemoverel then
+                    -- 算出滑鼠與目標的距離，乘以靈敏度 (0.8)，達到極快又不失控的瞬鎖
+                    local moveX = (screenPos.X - mousePos.X) * Settings.Smoothness
+                    local moveY = (screenPos.Y - mousePos.Y) * Settings.Smoothness
+                    mousemoverel(moveX, moveY)
+                else
+                    Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, headPos)
+                end
+            else
+                LockedTarget = nil -- 目標跑到螢幕外，解除鎖定
+            end
+        else
+            LockedTarget = nil -- 目標死亡，解除鎖定
+        end
+    else
+        LockedTarget = nil -- 鬆開右鍵，解除鎖定
+    end
 end)
 
 Players.PlayerRemoving:Connect(function(plr)
     if ESP_Boxes[plr] then ESP_Boxes[plr]:Remove() ESP_Boxes[plr] = nil end
+    if LockedTarget and LockedTarget.Name == plr.Name then LockedTarget = nil end
 end)
