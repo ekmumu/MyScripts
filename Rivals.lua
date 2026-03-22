@@ -1,5 +1,5 @@
 -- ==========================================
--- MUMU RIVALS - 物理跟槍 + 子彈轉彎 (Magic Bullet)
+-- MUMU RIVALS - 實體吸附 (Hitbox) 穩定版
 -- ==========================================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -10,27 +10,28 @@ local LocalPlayer = Players.LocalPlayer
 local Settings = {
     ESP = true,
     Aimbot = true,       -- 物理死鎖 (右鍵)
-    SilentAim = true,    -- ⚡ 子彈轉彎 (隨時吸附)
+    Hitbox = true,       -- ⚡ 實體吸附 (放大頭部)
+    HitboxSize = 12,     -- 頭部放大的倍數 (數值越大越容易打中)
     TeamCheck = true,  
     WallCheck = true,  
     Prediction = 0.12, 
     FOV = 250,
     MaxDistance = 350,
-    Smoothness = 1 
+    Smoothness = 0.8 
 }
 
 -- [[ 1. 絕對中心固定 UI ]]
 local SafeGui = (gethui and gethui()) or game:GetService("CoreGui")
-if SafeGui:FindFirstChild("MUMU_MAGIC") then
-    SafeGui.MUMU_MAGIC:Destroy()
+if SafeGui:FindFirstChild("MUMU_HITBOX") then
+    SafeGui.MUMU_HITBOX:Destroy()
 end
 
 local ScreenGui = Instance.new("ScreenGui", SafeGui)
-ScreenGui.Name = "MUMU_MAGIC"
+ScreenGui.Name = "MUMU_HITBOX"
 ScreenGui.ResetOnSpawn = false
 
 local Main = Instance.new("Frame", ScreenGui)
-Main.Size = UDim2.fromOffset(300, 540) -- 加高以容納新按鈕
+Main.Size = UDim2.fromOffset(300, 540) 
 Main.Position = UDim2.fromScale(0.5, 0.5) 
 Main.AnchorPoint = Vector2.new(0.5, 0.5)  
 Main.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
@@ -40,7 +41,7 @@ Instance.new("UIStroke", Main).Color = Color3.fromRGB(255, 0, 0)
 
 local Title = Instance.new("TextLabel", Main)
 Title.Size = UDim2.new(1, 0, 0, 70)
-Title.Text = "⚡ MUMU MAGIC"
+Title.Text = "⚡ MUMU HITBOX"
 Title.TextSize = 28
 Title.Font = Enum.Font.GothamBlack
 Title.TextColor3 = Color3.new(1, 1, 1)
@@ -73,7 +74,7 @@ end
 
 AddToggle("方框透視 (Box)", "ESP")
 AddToggle("物理死鎖 (右鍵)", "Aimbot")
-AddToggle("子彈轉彎 (Magic)", "SilentAim") -- ⚡ 新增開關
+AddToggle("子彈吸附 (巨頭)", "Hitbox") -- ⚡ 新增開關
 AddToggle("不瞄隊友 (Team)", "TeamCheck")
 AddToggle("隔牆不瞄 (Wall)", "WallCheck")
 
@@ -121,9 +122,38 @@ local function IsTeammate(p)
     return false
 end
 
--- [[ 4. 尋找目標核心 ]]
-local LockedTarget = nil     -- 給右鍵死鎖用的
-local SilentAimTarget = nil  -- 給子彈轉彎用的 (隨時更新)
+-- [[ 4. ⚡ 核心：實體巨頭吸附 (Hitbox Expander) ]]
+RunService.Heartbeat:Connect(function()
+    if Settings.Hitbox then
+        for _, p in pairs(Players:GetPlayers()) do
+            if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") and p.Character:FindFirstChild("HumanoidRootPart") then
+                -- 隊友跟太遠的敵人不放大
+                if IsTeammate(p) then continue end
+                if (Camera.CFrame.Position - p.Character.HumanoidRootPart.Position).Magnitude > Settings.MaxDistance then continue end
+                
+                local head = p.Character.Head
+                -- 將頭部放大，設定無質量(防止敵人飛天)與無碰撞(防止卡住)
+                head.Size = Vector3.new(Settings.HitboxSize, Settings.HitboxSize, Settings.HitboxSize)
+                head.Transparency = 0.8 -- 半透明，讓你看得見吸附範圍但不會擋死視線
+                head.CanCollide = false
+                head.Massless = true
+            end
+        end
+    else
+        -- 關閉時恢復原狀
+        for _, p in pairs(Players:GetPlayers()) do
+            if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") then
+                local head = p.Character.Head
+                head.Size = Vector3.new(1.2, 1.2, 1.2) -- 預設大小
+                head.Transparency = 0
+            end
+        end
+    end
+end)
+
+-- [[ 5. 尋找目標與 ESP 更新 ]]
+local LockedTarget = nil 
+local ESP_Boxes = {}
 
 local function FindNewTarget()
     local target, maxDist = nil, Settings.FOV
@@ -145,34 +175,6 @@ local function FindNewTarget()
     return target
 end
 
--- [[ 5. ⚡ 核心：子彈轉彎攔截 (Hook) ]]
-local oldNamecall
-oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
-    local method = getnamecallmethod()
-    
-    -- 攔截遊戲發射出的 Raycast (射線)
-    if Settings.SilentAim and method == "Raycast" and not checkcaller() then
-        -- 如果有抓到目標，就把子彈強行彎過去
-        if SilentAimTarget and SilentAimTarget:FindFirstChild("Head") and SilentAimTarget:FindFirstChild("HumanoidRootPart") then
-            local args = {...}
-            local origin = args[1]
-            local originalDirection = args[2]
-            
-            -- 計算目標頭部的精準預判位置
-            local headPos = SilentAimTarget.Head.Position + (SilentAimTarget.HumanoidRootPart.Velocity * Settings.Prediction)
-            
-            -- 修改子彈方向：從槍口指向敵人的頭部，保持原本的射程長度
-            local newDirection = (headPos - origin).Unit * originalDirection.Magnitude
-            args[2] = newDirection
-            
-            return oldNamecall(self, unpack(args))
-        end
-    end
-    return oldNamecall(self, ...)
-end)
-
--- [[ 6. 每幀更新邏輯 ]]
-local ESP_Boxes = {}
 RunService.RenderStepped:Connect(function()
     -- 1. 更新 ESP
     for _, p in pairs(Players:GetPlayers()) do
@@ -203,14 +205,7 @@ RunService.RenderStepped:Connect(function()
         end
     end
 
-    -- 2. 每幀更新子彈轉彎的目標 (不用按右鍵也能吸附)
-    if Settings.SilentAim then
-        SilentAimTarget = FindNewTarget()
-    else
-        SilentAimTarget = nil
-    end
-
-    -- 3. 物理死鎖 (右鍵)
+    -- 2. 物理死鎖 (右鍵)
     if Settings.Aimbot and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
         if not LockedTarget then LockedTarget = FindNewTarget() end
 
@@ -240,5 +235,4 @@ end)
 Players.PlayerRemoving:Connect(function(plr)
     if ESP_Boxes[plr] then ESP_Boxes[plr]:Remove() ESP_Boxes[plr] = nil end
     if LockedTarget and LockedTarget.Name == plr.Name then LockedTarget = nil end
-    if SilentAimTarget and SilentAimTarget.Name == plr.Name then SilentAimTarget = nil end
 end)
