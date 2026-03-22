@@ -1,5 +1,5 @@
 -- ==========================================
--- MUMU RIVALS - 真實物理鎖頭 + Box ESP
+-- MUMU RIVALS - 穩定方框 + 競技場距離過濾
 -- ==========================================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -12,17 +12,18 @@ local Settings = {
     Aimbot = true,
     Prediction = 0.12, 
     FOV = 250,
-    Smoothness = 0.5 -- 物理移動靈敏度 (0.1~1.0，1.0為最快)
+    Smoothness = 0.5, 
+    MaxDistance = 350 -- ⚡ 關鍵：限制在 350 格內，完美過濾別場的敵人
 }
 
 -- [[ 1. UI 建立: 絕對中心固定 ]]
 local SafeGui = (gethui and gethui()) or game:GetService("CoreGui")
-if SafeGui:FindFirstChild("MUMU_PHYSICS") then
-    SafeGui.MUMU_PHYSICS:Destroy()
+if SafeGui:FindFirstChild("MUMU_STABLE") then
+    SafeGui.MUMU_STABLE:Destroy()
 end
 
 local ScreenGui = Instance.new("ScreenGui", SafeGui)
-ScreenGui.Name = "MUMU_PHYSICS"
+ScreenGui.Name = "MUMU_STABLE"
 ScreenGui.ResetOnSpawn = false
 
 local Main = Instance.new("Frame", ScreenGui)
@@ -67,7 +68,7 @@ local function AddToggle(name, settingKey)
     end)
 end
 
-AddToggle("方框透視 (Box)", "ESP")
+AddToggle("穩定方框 (Box)", "ESP")
 AddToggle("物理鎖頭 (右鍵)", "Aimbot")
 
 local Hint = Instance.new("TextLabel", Main)
@@ -86,7 +87,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
     end
 end)
 
--- [[ 3. 專業方框透視 (Box ESP) ]]
+-- [[ 3. 穩定方框透視 (Box ESP) ]]
 local ESP_Boxes = {}
 
 Players.PlayerRemoving:Connect(function(plr)
@@ -108,22 +109,31 @@ local function UpdateESP()
             end
 
             local box = ESP_Boxes[p]
-            if Settings.ESP and p.Character and p.Character:FindFirstChild("HumanoidRootPart") and p.Character:FindFirstChild("Humanoid") and p.Character.Humanoid.Health > 0 then
-                local hrp = p.Character.HumanoidRootPart
-                local pos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
+            -- 確保角色存在且活著
+            if Settings.ESP and p.Character and p.Character:FindFirstChild("HumanoidRootPart") and p.Character:FindFirstChild("Head") and p.Character:FindFirstChild("Humanoid") and p.Character.Humanoid.Health > 0 then
+                
+                -- ⚡ 距離過濾：超過 MaxDistance (350格) 直接不畫框
+                local dist = (Camera.CFrame.Position - p.Character.HumanoidRootPart.Position).Magnitude
+                if dist < Settings.MaxDistance then
+                    local head = p.Character.Head
+                    local hrp = p.Character.HumanoidRootPart
+                    
+                    -- ⚡ 穩定算法：用頭頂和骨盆來計算絕對高低差，防止動畫導致框框閃爍
+                    local topPos, onScreen = Camera:WorldToViewportPoint(head.Position + Vector3.new(0, 0.5, 0))
+                    local bottomPos = Camera:WorldToViewportPoint(hrp.Position - Vector3.new(0, 3, 0))
 
-                if onScreen then
-                    -- 計算敵人身高來畫出完美比例的框框
-                    local top = Camera:WorldToViewportPoint(hrp.Position + Vector3.new(0, 3, 0))
-                    local bottom = Camera:WorldToViewportPoint(hrp.Position - Vector3.new(0, 3.5, 0))
-                    local height = math.abs(top.Y - bottom.Y)
-                    local width = height * 0.6
+                    if onScreen then
+                        local height = math.abs(topPos.Y - bottomPos.Y)
+                        local width = height * 0.65 -- 抓一個完美的長寬比
 
-                    box.Size = Vector2.new(width, height)
-                    box.Position = Vector2.new(pos.X - width/2, pos.Y - height/2)
-                    box.Visible = true
+                        box.Size = Vector2.new(width, height)
+                        box.Position = Vector2.new(topPos.X - width/2, topPos.Y)
+                        box.Visible = true
+                    else
+                        box.Visible = false
+                    end
                 else
-                    box.Visible = false
+                    box.Visible = false -- 太遠（別場的）隱藏
                 end
             else
                 box.Visible = false
@@ -132,12 +142,17 @@ local function UpdateESP()
     end
 end
 
--- [[ 4. 物理抓取鎖頭核心 ]]
+-- [[ 4. 物理抓取鎖頭 + 距離過濾 ]]
 local function GetTarget()
     local target, maxDist = nil, Settings.FOV
     local mousePos = UserInputService:GetMouseLocation()
     for _, p in pairs(Players:GetPlayers()) do
         if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") and p.Character:FindFirstChild("Humanoid") and p.Character.Humanoid.Health > 0 then
+            
+            -- ⚡ 距離過濾：別場的敵人絕不鎖定
+            local distFromPlayer = (Camera.CFrame.Position - p.Character.HumanoidRootPart.Position).Magnitude
+            if distFromPlayer > Settings.MaxDistance then continue end
+
             local pos, onScreen = Camera:WorldToViewportPoint(p.Character.Head.Position)
             if onScreen then
                 local dist = (Vector2.new(pos.X, pos.Y) - mousePos).Magnitude
@@ -152,7 +167,6 @@ local function GetTarget()
 end
 
 RunService.RenderStepped:Connect(function()
-    -- 更新方框透視
     UpdateESP()
 
     -- 物理鎖頭 (mousemoverel)
@@ -160,20 +174,18 @@ RunService.RenderStepped:Connect(function()
         local target = GetTarget()
         
         if target and target:FindFirstChild("Head") then
-            -- 抓取頭部物件 + 預判移動位置
             local headPos = target.Head.Position + (target.HumanoidRootPart.Velocity * Settings.Prediction)
             local screenPos, onScreen = Camera:WorldToViewportPoint(headPos)
             
             if onScreen then
                 local mousePos = UserInputService:GetMouseLocation()
                 
-                -- ⚡ 關鍵技術：使用底層函數直接拉動滑鼠，確保遊戲引擎判定為「玩家轉動視角」，槍枝才會跟上！
                 if mousemoverel then
                     local moveX = (screenPos.X - mousePos.X) * Settings.Smoothness
                     local moveY = (screenPos.Y - mousePos.Y) * Settings.Smoothness
                     mousemoverel(moveX, moveY)
                 else
-                    -- 備用方案 (如果 Xeno 不支援物理移動)
+                    -- 備案
                     Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, headPos)
                 end
             end
