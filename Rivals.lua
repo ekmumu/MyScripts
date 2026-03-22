@@ -1,5 +1,5 @@
 -- ==========================================
--- MUMU RIVALS - 實體吸附 (Hitbox) 穩定版
+-- MUMU RIVALS - 物理滑鼠死鎖 + 巨頭吸附版
 -- ==========================================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -9,29 +9,29 @@ local LocalPlayer = Players.LocalPlayer
 
 local Settings = {
     ESP = true,
-    Aimbot = true,       -- 物理死鎖 (右鍵)
-    Hitbox = true,       -- ⚡ 實體吸附 (放大頭部)
-    HitboxSize = 12,     -- 頭部放大的倍數 (數值越大越容易打中)
+    Aimbot = true,
+    Hitbox = true,       -- ⚡ 新增：子彈吸附 (放大頭部)
+    HitboxSize = 12,     -- ⚡ 頭部放大倍數 (數值越大越容易打中)
     TeamCheck = true,  
     WallCheck = true,  
     Prediction = 0.12, 
     FOV = 250,
     MaxDistance = 350,
-    Smoothness = 0.8 
+    Smoothness = 0.8
 }
 
 -- [[ 1. 絕對中心固定 UI ]]
 local SafeGui = (gethui and gethui()) or game:GetService("CoreGui")
-if SafeGui:FindFirstChild("MUMU_HITBOX") then
-    SafeGui.MUMU_HITBOX:Destroy()
+if SafeGui:FindFirstChild("MUMU_PHYSICS_LOCK") then
+    SafeGui.MUMU_PHYSICS_LOCK:Destroy()
 end
 
 local ScreenGui = Instance.new("ScreenGui", SafeGui)
-ScreenGui.Name = "MUMU_HITBOX"
+ScreenGui.Name = "MUMU_PHYSICS_LOCK"
 ScreenGui.ResetOnSpawn = false
 
 local Main = Instance.new("Frame", ScreenGui)
-Main.Size = UDim2.fromOffset(300, 540) 
+Main.Size = UDim2.fromOffset(300, 540) -- ⚡ 加高視窗以容納新按鈕
 Main.Position = UDim2.fromScale(0.5, 0.5) 
 Main.AnchorPoint = Vector2.new(0.5, 0.5)  
 Main.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
@@ -41,8 +41,8 @@ Instance.new("UIStroke", Main).Color = Color3.fromRGB(255, 0, 0)
 
 local Title = Instance.new("TextLabel", Main)
 Title.Size = UDim2.new(1, 0, 0, 70)
-Title.Text = "⚡ MUMU HITBOX"
-Title.TextSize = 28
+Title.Text = "⚡ MUMU CORE"
+Title.TextSize = 30
 Title.Font = Enum.Font.GothamBlack
 Title.TextColor3 = Color3.new(1, 1, 1)
 Title.BackgroundTransparency = 1
@@ -52,7 +52,7 @@ Container.Size = UDim2.new(0.9, 0, 0.8, 0)
 Container.Position = UDim2.fromScale(0.05, 0.13)
 Container.BackgroundTransparency = 1
 local Layout = Instance.new("UIListLayout", Container)
-Layout.Padding = UDim.new(0, 12)
+Layout.Padding = UDim.new(0, 15)
 
 -- [ 按鈕生成器 ]
 local function AddToggle(name, settingKey)
@@ -74,7 +74,7 @@ end
 
 AddToggle("方框透視 (Box)", "ESP")
 AddToggle("物理死鎖 (右鍵)", "Aimbot")
-AddToggle("子彈吸附 (巨頭)", "Hitbox") -- ⚡ 新增開關
+AddToggle("子彈吸附 (巨頭)", "Hitbox") -- ⚡ 新增吸附按鈕
 AddToggle("不瞄隊友 (Team)", "TeamCheck")
 AddToggle("隔牆不瞄 (Wall)", "WallCheck")
 
@@ -108,6 +108,7 @@ local function IsVisible(targetChar)
     rayParams.IgnoreWater = true
 
     local result = workspace:Raycast(origin, targetPos - origin, rayParams)
+    
     if result then
         if result.Instance:IsDescendantOf(targetChar) then return true else return false end
     end
@@ -122,38 +123,74 @@ local function IsTeammate(p)
     return false
 end
 
--- [[ 4. ⚡ 核心：實體巨頭吸附 (Hitbox Expander) ]]
+-- [[ 4. ⚡ 新增：巨頭吸附核心 (Hitbox Expander) ]]
 RunService.Heartbeat:Connect(function()
-    if Settings.Hitbox then
-        for _, p in pairs(Players:GetPlayers()) do
-            if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") and p.Character:FindFirstChild("HumanoidRootPart") then
-                -- 隊友跟太遠的敵人不放大
-                if IsTeammate(p) then continue end
-                if (Camera.CFrame.Position - p.Character.HumanoidRootPart.Position).Magnitude > Settings.MaxDistance then continue end
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") and p.Character:FindFirstChild("HumanoidRootPart") then
+            local head = p.Character.Head
+            
+            -- 如果功能開啟，且敵人活著
+            if Settings.Hitbox and p.Character.Humanoid.Health > 0 then
+                -- 隊友或太遠的敵人不放大
+                if IsTeammate(p) or (Camera.CFrame.Position - p.Character.HumanoidRootPart.Position).Magnitude > Settings.MaxDistance then
+                    head.Size = Vector3.new(1.2, 1.2, 1.2)
+                    head.Transparency = 0
+                    continue
+                end
                 
-                local head = p.Character.Head
-                -- 將頭部放大，設定無質量(防止敵人飛天)與無碰撞(防止卡住)
+                -- 放大頭部並設定為無碰撞、半透明
                 head.Size = Vector3.new(Settings.HitboxSize, Settings.HitboxSize, Settings.HitboxSize)
-                head.Transparency = 0.8 -- 半透明，讓你看得見吸附範圍但不會擋死視線
+                head.Transparency = 0.8 -- 半透明，不會擋住視線
                 head.CanCollide = false
                 head.Massless = true
-            end
-        end
-    else
-        -- 關閉時恢復原狀
-        for _, p in pairs(Players:GetPlayers()) do
-            if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") then
-                local head = p.Character.Head
-                head.Size = Vector3.new(1.2, 1.2, 1.2) -- 預設大小
+            else
+                -- 關閉功能或敵人死亡時，恢復正常大小
+                head.Size = Vector3.new(1.2, 1.2, 1.2)
                 head.Transparency = 0
             end
         end
     end
 end)
 
--- [[ 5. 尋找目標與 ESP 更新 ]]
-local LockedTarget = nil 
+-- [[ 5. 方框透視 ]]
 local ESP_Boxes = {}
+local function UpdateESP()
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer then
+            if not ESP_Boxes[p] then
+                local box = Drawing.new("Square")
+                box.Color = Color3.fromRGB(255, 50, 50)
+                box.Thickness = 1.5
+                box.Filled = false
+                ESP_Boxes[p] = box
+            end
+
+            local box = ESP_Boxes[p]
+            if Settings.ESP and p.Character and p.Character:FindFirstChild("HumanoidRootPart") and p.Character:FindFirstChild("Head") and p.Character:FindFirstChild("Humanoid") and p.Character.Humanoid.Health > 0 then
+                
+                if IsTeammate(p) then box.Visible = false continue end
+                
+                local dist = (Camera.CFrame.Position - p.Character.HumanoidRootPart.Position).Magnitude
+                if dist < Settings.MaxDistance then
+                    -- ⚡ 這裡的透視框不受巨頭影響，依然是完美的身體比例
+                    local topPos, onScreen = Camera:WorldToViewportPoint(p.Character.HumanoidRootPart.Position + Vector3.new(0, 1.5, 0))
+                    local bottomPos = Camera:WorldToViewportPoint(p.Character.HumanoidRootPart.Position - Vector3.new(0, 3.5, 0))
+
+                    if onScreen then
+                        local height = math.abs(topPos.Y - bottomPos.Y)
+                        local width = height * 0.6
+                        box.Size = Vector2.new(width, height)
+                        box.Position = Vector2.new(topPos.X - width/2, topPos.Y)
+                        box.Visible = true
+                    else box.Visible = false end
+                else box.Visible = false end
+            else box.Visible = false end
+        end
+    end
+end
+
+-- [[ 6. 核心：物理模擬 + 死鎖記憶 ]]
+local LockedTarget = nil 
 
 local function FindNewTarget()
     local target, maxDist = nil, Settings.FOV
@@ -176,40 +213,16 @@ local function FindNewTarget()
 end
 
 RunService.RenderStepped:Connect(function()
-    -- 1. 更新 ESP
-    for _, p in pairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer then
-            if not ESP_Boxes[p] then
-                local box = Drawing.new("Square")
-                box.Color = Color3.fromRGB(255, 50, 50)
-                box.Thickness = 1.5
-                box.Filled = false
-                ESP_Boxes[p] = box
-            end
+    UpdateESP()
 
-            local box = ESP_Boxes[p]
-            if Settings.ESP and p.Character and p.Character:FindFirstChild("HumanoidRootPart") and p.Character:FindFirstChild("Head") and p.Character:FindFirstChild("Humanoid") and p.Character.Humanoid.Health > 0 then
-                if IsTeammate(p) then box.Visible = false continue end
-                if (Camera.CFrame.Position - p.Character.HumanoidRootPart.Position).Magnitude < Settings.MaxDistance then
-                    local topPos, onScreen = Camera:WorldToViewportPoint(p.Character.Head.Position + Vector3.new(0, 0.5, 0))
-                    local bottomPos = Camera:WorldToViewportPoint(p.Character.HumanoidRootPart.Position - Vector3.new(0, 3.5, 0))
-                    if onScreen then
-                        local height = math.abs(topPos.Y - bottomPos.Y)
-                        local width = height * 0.6
-                        box.Size = Vector2.new(width, height)
-                        box.Position = Vector2.new(topPos.X - width/2, topPos.Y)
-                        box.Visible = true
-                    else box.Visible = false end
-                else box.Visible = false end
-            else box.Visible = false end
-        end
-    end
-
-    -- 2. 物理死鎖 (右鍵)
     if Settings.Aimbot and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
-        if not LockedTarget then LockedTarget = FindNewTarget() end
+        
+        if not LockedTarget then
+            LockedTarget = FindNewTarget()
+        end
 
         if LockedTarget and LockedTarget:FindFirstChild("Head") and LockedTarget:FindFirstChild("Humanoid") and LockedTarget.Humanoid.Health > 0 then
+            
             if (Camera.CFrame.Position - LockedTarget.HumanoidRootPart.Position).Magnitude > Settings.MaxDistance or not IsVisible(LockedTarget) then
                 LockedTarget = nil 
                 return
@@ -220,6 +233,7 @@ RunService.RenderStepped:Connect(function()
             
             if onScreen then
                 local mousePos = UserInputService:GetMouseLocation()
+                
                 if mousemoverel then
                     local moveX = (screenPos.X - mousePos.X) * Settings.Smoothness
                     local moveY = (screenPos.Y - mousePos.Y) * Settings.Smoothness
@@ -227,9 +241,15 @@ RunService.RenderStepped:Connect(function()
                 else
                     Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, headPos)
                 end
-            else LockedTarget = nil end
-        else LockedTarget = nil end
-    else LockedTarget = nil end
+            else
+                LockedTarget = nil 
+            end
+        else
+            LockedTarget = nil 
+        end
+    else
+        LockedTarget = nil 
+    end
 end)
 
 Players.PlayerRemoving:Connect(function(plr)
