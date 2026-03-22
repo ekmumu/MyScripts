@@ -1,5 +1,5 @@
 -- ==========================================
--- MUMU RIVALS - 絕對中心固定介面 + 死鎖追蹤
+-- MUMU RIVALS - 真實物理鎖頭 + Box ESP
 -- ==========================================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -10,26 +10,26 @@ local LocalPlayer = Players.LocalPlayer
 local Settings = {
     ESP = true,
     Aimbot = true,
-    Prediction = 0.13, -- 最適合 Rivals 的跑動預判值
-    FOV = 250
+    Prediction = 0.12, 
+    FOV = 250,
+    Smoothness = 0.5 -- 物理移動靈敏度 (0.1~1.0，1.0為最快)
 }
 
--- [[ 1. UI 建立: 絕對固定在正中心 ]]
+-- [[ 1. UI 建立: 絕對中心固定 ]]
 local SafeGui = (gethui and gethui()) or game:GetService("CoreGui")
-if SafeGui:FindFirstChild("MUMU_FIXED_CENTER") then
-    SafeGui.MUMU_FIXED_CENTER:Destroy()
+if SafeGui:FindFirstChild("MUMU_PHYSICS") then
+    SafeGui.MUMU_PHYSICS:Destroy()
 end
 
 local ScreenGui = Instance.new("ScreenGui", SafeGui)
-ScreenGui.Name = "MUMU_FIXED_CENTER"
+ScreenGui.Name = "MUMU_PHYSICS"
 ScreenGui.ResetOnSpawn = false
 
 local Main = Instance.new("Frame", ScreenGui)
 Main.Size = UDim2.fromOffset(300, 380)
-Main.Position = UDim2.fromScale(0.5, 0.5) -- 絕對正中心
-Main.AnchorPoint = Vector2.new(0.5, 0.5)  -- 錨點在中心
+Main.Position = UDim2.fromScale(0.5, 0.5) 
+Main.AnchorPoint = Vector2.new(0.5, 0.5)  
 Main.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
--- ⚠️ 移除所有拖曳腳本，確保它絕對不會飄走 ⚠️
 Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 10)
 Instance.new("UIStroke", Main).Thickness = 3
 Instance.new("UIStroke", Main).Color = Color3.fromRGB(255, 0, 0)
@@ -67,8 +67,8 @@ local function AddToggle(name, settingKey)
     end)
 end
 
-AddToggle("ESP (透視)", "ESP")
-AddToggle("死鎖追蹤 (右鍵)", "Aimbot")
+AddToggle("方框透視 (Box)", "ESP")
+AddToggle("物理鎖頭 (右鍵)", "Aimbot")
 
 local Hint = Instance.new("TextLabel", Main)
 Hint.Size = UDim2.new(1, 0, 0, 30)
@@ -86,16 +86,61 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
     end
 end)
 
--- [[ 3. 核心邏輯: 死鎖追蹤 ]]
-local LockedTarget = nil
+-- [[ 3. 專業方框透視 (Box ESP) ]]
+local ESP_Boxes = {}
 
+Players.PlayerRemoving:Connect(function(plr)
+    if ESP_Boxes[plr] then
+        ESP_Boxes[plr]:Remove()
+        ESP_Boxes[plr] = nil
+    end
+end)
+
+local function UpdateESP()
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer then
+            if not ESP_Boxes[p] then
+                local box = Drawing.new("Square")
+                box.Color = Color3.fromRGB(255, 50, 50)
+                box.Thickness = 1.5
+                box.Filled = false
+                ESP_Boxes[p] = box
+            end
+
+            local box = ESP_Boxes[p]
+            if Settings.ESP and p.Character and p.Character:FindFirstChild("HumanoidRootPart") and p.Character:FindFirstChild("Humanoid") and p.Character.Humanoid.Health > 0 then
+                local hrp = p.Character.HumanoidRootPart
+                local pos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
+
+                if onScreen then
+                    -- 計算敵人身高來畫出完美比例的框框
+                    local top = Camera:WorldToViewportPoint(hrp.Position + Vector3.new(0, 3, 0))
+                    local bottom = Camera:WorldToViewportPoint(hrp.Position - Vector3.new(0, 3.5, 0))
+                    local height = math.abs(top.Y - bottom.Y)
+                    local width = height * 0.6
+
+                    box.Size = Vector2.new(width, height)
+                    box.Position = Vector2.new(pos.X - width/2, pos.Y - height/2)
+                    box.Visible = true
+                else
+                    box.Visible = false
+                end
+            else
+                box.Visible = false
+            end
+        end
+    end
+end
+
+-- [[ 4. 物理抓取鎖頭核心 ]]
 local function GetTarget()
     local target, maxDist = nil, Settings.FOV
+    local mousePos = UserInputService:GetMouseLocation()
     for _, p in pairs(Players:GetPlayers()) do
         if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") and p.Character:FindFirstChild("Humanoid") and p.Character.Humanoid.Health > 0 then
             local pos, onScreen = Camera:WorldToViewportPoint(p.Character.Head.Position)
             if onScreen then
-                local dist = (Vector2.new(pos.X, pos.Y) - UserInputService:GetMouseLocation()).Magnitude
+                local dist = (Vector2.new(pos.X, pos.Y) - mousePos).Magnitude
                 if dist < maxDist then 
                     maxDist = dist 
                     target = p.Character 
@@ -107,38 +152,31 @@ local function GetTarget()
 end
 
 RunService.RenderStepped:Connect(function()
-    -- ESP
-    if Settings.ESP then
-        for _, p in pairs(Players:GetPlayers()) do
-            if p ~= LocalPlayer and p.Character then
-                local h = p.Character:FindFirstChild("MUMU_Highlight") or Instance.new("Highlight", p.Character)
-                h.Name = "MUMU_Highlight"
-                h.FillColor = Color3.new(1, 0, 0)
-                h.OutlineColor = Color3.new(1, 1, 1)
+    -- 更新方框透視
+    UpdateESP()
+
+    -- 物理鎖頭 (mousemoverel)
+    if Settings.Aimbot and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
+        local target = GetTarget()
+        
+        if target and target:FindFirstChild("Head") then
+            -- 抓取頭部物件 + 預判移動位置
+            local headPos = target.Head.Position + (target.HumanoidRootPart.Velocity * Settings.Prediction)
+            local screenPos, onScreen = Camera:WorldToViewportPoint(headPos)
+            
+            if onScreen then
+                local mousePos = UserInputService:GetMouseLocation()
+                
+                -- ⚡ 關鍵技術：使用底層函數直接拉動滑鼠，確保遊戲引擎判定為「玩家轉動視角」，槍枝才會跟上！
+                if mousemoverel then
+                    local moveX = (screenPos.X - mousePos.X) * Settings.Smoothness
+                    local moveY = (screenPos.Y - mousePos.Y) * Settings.Smoothness
+                    mousemoverel(moveX, moveY)
+                else
+                    -- 備用方案 (如果 Xeno 不支援物理移動)
+                    Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, headPos)
+                end
             end
         end
-    end
-
-    -- Aimbot (死鎖追蹤)
-    if Settings.Aimbot and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
-        -- 如果沒有目標，就抓一個最近的
-        if not LockedTarget then
-            LockedTarget = GetTarget()
-        end
-        
-        -- 如果目標存在且活著
-        if LockedTarget and LockedTarget:FindFirstChild("Head") and LockedTarget:FindFirstChild("Humanoid") and LockedTarget.Humanoid.Health > 0 then
-            -- 計算他下一秒會跑去哪裡 (預判)
-            local targetPos = LockedTarget.Head.Position + (LockedTarget.HumanoidRootPart.Velocity * Settings.Prediction)
-            
-            -- ⚡ 關鍵修復：完全鎖死相機視角，不干預身體。這樣你的槍口就能完美指過去了。
-            Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, targetPos)
-        else
-            -- 目標死了或不見了，清空重新找
-            LockedTarget = nil
-        end
-    else
-        -- 放開右鍵，立刻解除鎖定
-        LockedTarget = nil
     end
 end)
