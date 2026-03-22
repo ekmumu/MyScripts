@@ -1,6 +1,4 @@
--- ==========================================
--- MUMU RIVALS - 穩定方框 + 競技場距離過濾
--- ==========================================
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -13,10 +11,10 @@ local Settings = {
     Prediction = 0.12, 
     FOV = 250,
     Smoothness = 0.5, 
-    MaxDistance = 350 -- ⚡ 關鍵：限制在 350 格內，完美過濾別場的敵人
+    MaxDistance = 350 -- 
 }
 
--- [[ 1. UI 建立: 絕對中心固定 ]]
+
 local SafeGui = (gethui and gethui()) or game:GetService("CoreGui")
 if SafeGui:FindFirstChild("MUMU_STABLE") then
     SafeGui.MUMU_STABLE:Destroy()
@@ -50,7 +48,7 @@ Container.BackgroundTransparency = 1
 local Layout = Instance.new("UIListLayout", Container)
 Layout.Padding = UDim.new(0, 15)
 
--- [ 按鈕生成器 ]
+
 local function AddToggle(name, settingKey)
     local btn = Instance.new("TextButton", Container)
     btn.Size = UDim2.new(1, 0, 0, 60)
@@ -80,14 +78,14 @@ Hint.TextSize = 16
 Hint.Font = Enum.Font.Gotham
 Hint.BackgroundTransparency = 1
 
--- [[ 2. J鍵開關邏輯 ]]
+
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if not gameProcessed and input.KeyCode == Enum.KeyCode.J then
         Main.Visible = not Main.Visible
     end
 end)
 
--- [[ 3. 穩定方框透視 (Box ESP) ]]
+
 local ESP_Boxes = {}
 
 Players.PlayerRemoving:Connect(function(plr)
@@ -109,22 +107,22 @@ local function UpdateESP()
             end
 
             local box = ESP_Boxes[p]
-            -- 確保角色存在且活著
+            
             if Settings.ESP and p.Character and p.Character:FindFirstChild("HumanoidRootPart") and p.Character:FindFirstChild("Head") and p.Character:FindFirstChild("Humanoid") and p.Character.Humanoid.Health > 0 then
                 
-                -- ⚡ 距離過濾：超過 MaxDistance (350格) 直接不畫框
+              
                 local dist = (Camera.CFrame.Position - p.Character.HumanoidRootPart.Position).Magnitude
                 if dist < Settings.MaxDistance then
                     local head = p.Character.Head
                     local hrp = p.Character.HumanoidRootPart
                     
-                    -- ⚡ 穩定算法：用頭頂和骨盆來計算絕對高低差，防止動畫導致框框閃爍
+                   
                     local topPos, onScreen = Camera:WorldToViewportPoint(head.Position + Vector3.new(0, 0.5, 0))
                     local bottomPos = Camera:WorldToViewportPoint(hrp.Position - Vector3.new(0, 3, 0))
 
                     if onScreen then
                         local height = math.abs(topPos.Y - bottomPos.Y)
-                        local width = height * 0.65 -- 抓一個完美的長寬比
+                        local width = height * 0.65 
 
                         box.Size = Vector2.new(width, height)
                         box.Position = Vector2.new(topPos.X - width/2, topPos.Y)
@@ -133,7 +131,7 @@ local function UpdateESP()
                         box.Visible = false
                     end
                 else
-                    box.Visible = false -- 太遠（別場的）隱藏
+                    box.Visible = false 
                 end
             else
                 box.Visible = false
@@ -142,14 +140,14 @@ local function UpdateESP()
     end
 end
 
--- [[ 4. 物理抓取鎖頭 + 距離過濾 ]]
+
 local function GetTarget()
     local target, maxDist = nil, Settings.FOV
     local mousePos = UserInputService:GetMouseLocation()
     for _, p in pairs(Players:GetPlayers()) do
         if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") and p.Character:FindFirstChild("Humanoid") and p.Character.Humanoid.Health > 0 then
             
-            -- ⚡ 距離過濾：別場的敵人絕不鎖定
+            
             local distFromPlayer = (Camera.CFrame.Position - p.Character.HumanoidRootPart.Position).Magnitude
             if distFromPlayer > Settings.MaxDistance then continue end
 
@@ -169,7 +167,7 @@ end
 RunService.RenderStepped:Connect(function()
     UpdateESP()
 
-    -- 物理鎖頭 (mousemoverel)
+    
     if Settings.Aimbot and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
         local target = GetTarget()
         
@@ -185,7 +183,7 @@ RunService.RenderStepped:Connect(function()
                     local moveY = (screenPos.Y - mousePos.Y) * Settings.Smoothness
                     mousemoverel(moveX, moveY)
                 else
-                    -- 備案
+                    
                     Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, headPos)
                 end
             end
