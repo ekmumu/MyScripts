@@ -1,19 +1,20 @@
 -- ==========================================
--- MUMU RIVALS - 物理跟槍 + 雙重安全攔截吸附
+-- MUMU RIVALS - 物理滑鼠死鎖 + 飛行穿牆版
 -- ==========================================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local Camera = workspace.CurrentCamera
 local LocalPlayer = Players.LocalPlayer
-local Mouse = LocalPlayer:GetMouse()
 
 local Settings = {
     ESP = true,
-    Aimbot = true,       -- 物理死鎖 (右鍵)
-    SilentAim = true,    -- ⚡ 子彈轉彎/吸附 (免瞄準)
+    Aimbot = true,
     TeamCheck = true,  
     WallCheck = true,  
+    Fly = false,       -- ⚡ 新增：飛行模式
+    Noclip = false,    -- ⚡ 新增：穿牆模式
+    FlySpeed = 50,     -- ⚡ 飛行速度
     Prediction = 0.12, 
     FOV = 250,
     MaxDistance = 350,
@@ -22,16 +23,16 @@ local Settings = {
 
 -- [[ 1. 絕對中心固定 UI ]]
 local SafeGui = (gethui and gethui()) or game:GetService("CoreGui")
-if SafeGui:FindFirstChild("MUMU_FINAL_MAGIC") then
-    SafeGui.MUMU_FINAL_MAGIC:Destroy()
+if SafeGui:FindFirstChild("MUMU_PHYSICS_LOCK") then
+    SafeGui.MUMU_PHYSICS_LOCK:Destroy()
 end
 
 local ScreenGui = Instance.new("ScreenGui", SafeGui)
-ScreenGui.Name = "MUMU_FINAL_MAGIC"
+ScreenGui.Name = "MUMU_PHYSICS_LOCK"
 ScreenGui.ResetOnSpawn = false
 
 local Main = Instance.new("Frame", ScreenGui)
-Main.Size = UDim2.fromOffset(300, 540) 
+Main.Size = UDim2.fromOffset(300, 580) -- ⬆️ 拉高介面以容納新按鈕
 Main.Position = UDim2.fromScale(0.5, 0.5) 
 Main.AnchorPoint = Vector2.new(0.5, 0.5)  
 Main.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
@@ -54,8 +55,8 @@ Container.BackgroundTransparency = 1
 local Layout = Instance.new("UIListLayout", Container)
 Layout.Padding = UDim.new(0, 12)
 
--- [ 按鈕生成器 ]
-local function AddToggle(name, settingKey)
+-- [ 按鈕生成器 (支援額外回呼函數) ]
+local function AddToggle(name, settingKey, customCallback)
     local btn = Instance.new("TextButton", Container)
     btn.Size = UDim2.new(1, 0, 0, 55)
     btn.BackgroundColor3 = Settings[settingKey] and Color3.fromRGB(200, 0, 0) or Color3.fromRGB(45, 45, 45)
@@ -69,29 +70,81 @@ local function AddToggle(name, settingKey)
         Settings[settingKey] = not Settings[settingKey]
         btn.Text = name .. ": " .. (Settings[settingKey] and "ON" or "OFF")
         btn.BackgroundColor3 = Settings[settingKey] and Color3.fromRGB(200, 0, 0) or Color3.fromRGB(45, 45, 45)
+        if customCallback then customCallback(Settings[settingKey]) end
     end)
+end
+
+-- [[ ⚡ 飛行系統的物理元件控制 ]]
+local FlyBodyGyro, FlyBodyVelocity
+local CONTROL = {F = 0, B = 0, L = 0, R = 0, UP = 0, DOWN = 0}
+
+local function UpdateFlyState(state)
+    local char = LocalPlayer.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") or not char:FindFirstChild("Humanoid") then return end
+    local hrp = char.HumanoidRootPart
+
+    if state then
+        -- 開啟飛行：創建反重力與推力元件
+        FlyBodyGyro = Instance.new("BodyGyro", hrp)
+        FlyBodyGyro.P = 9e4
+        FlyBodyGyro.maxTorque = Vector3.new(9e9, 9e9, 9e9)
+        FlyBodyGyro.cframe = hrp.CFrame
+
+        FlyBodyVelocity = Instance.new("BodyVelocity", hrp)
+        FlyBodyVelocity.velocity = Vector3.new(0, 0, 0)
+        FlyBodyVelocity.maxForce = Vector3.new(9e9, 9e9, 9e9)
+
+        char.Humanoid.PlatformStand = true -- 關閉跑步動畫，防止抖動
+    else
+        -- 關閉飛行：刪除元件
+        if FlyBodyGyro then FlyBodyGyro:Destroy() end
+        if FlyBodyVelocity then FlyBodyVelocity:Destroy() end
+        char.Humanoid.PlatformStand = false
+    end
 end
 
 AddToggle("方框透視 (Box)", "ESP")
 AddToggle("物理死鎖 (右鍵)", "Aimbot")
-AddToggle("子彈吸附 (Magic)", "SilentAim") -- ⚡ 真正的子彈轉彎
 AddToggle("不瞄隊友 (Team)", "TeamCheck")
 AddToggle("隔牆不瞄 (Wall)", "WallCheck")
+AddToggle("飛行模式 (Fly)", "Fly", UpdateFlyState) -- ⚡ 綁定飛行開關
+AddToggle("穿牆模式 (Noclip)", "Noclip")           -- ⚡ 穿牆開關
 
 local Hint = Instance.new("TextLabel", Main)
 Hint.Size = UDim2.new(1, 0, 0, 30)
-Hint.Position = UDim2.new(0, 0, 1, -40)
-Hint.Text = "按 [J] 鍵顯示/隱藏"
+Hint.Position = UDim2.new(0, 0, 1, -35)
+Hint.Text = "飛行控制: WASD | 空白鍵升 | Ctrl降"
 Hint.TextColor3 = Color3.fromRGB(150, 150, 150)
-Hint.TextSize = 16
+Hint.TextSize = 14
 Hint.Font = Enum.Font.Gotham
 Hint.BackgroundTransparency = 1
 
--- [[ 2. J鍵開關 ]]
+-- [[ 2. 按鍵監聽 (包含 J鍵 與 飛行WASD) ]]
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if not gameProcessed and input.KeyCode == Enum.KeyCode.J then
         Main.Visible = not Main.Visible
     end
+    -- 飛行控制按下
+    if not gameProcessed then
+        local k = input.KeyCode
+        if k == Enum.KeyCode.W then CONTROL.F = 1
+        elseif k == Enum.KeyCode.S then CONTROL.B = -1
+        elseif k == Enum.KeyCode.A then CONTROL.L = -1
+        elseif k == Enum.KeyCode.D then CONTROL.R = 1
+        elseif k == Enum.KeyCode.Space then CONTROL.UP = 1
+        elseif k == Enum.KeyCode.LeftControl then CONTROL.DOWN = -1 end
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input, gameProcessed)
+    -- 飛行控制鬆開
+    local k = input.KeyCode
+    if k == Enum.KeyCode.W then CONTROL.F = 0
+    elseif k == Enum.KeyCode.S then CONTROL.B = 0
+    elseif k == Enum.KeyCode.A then CONTROL.L = 0
+    elseif k == Enum.KeyCode.D then CONTROL.R = 0
+    elseif k == Enum.KeyCode.Space then CONTROL.UP = 0
+    elseif k == Enum.KeyCode.LeftControl then CONTROL.DOWN = 0 end
 end)
 
 -- [[ 3. 過濾邏輯 ]]
@@ -108,6 +161,7 @@ local function IsVisible(targetChar)
     rayParams.IgnoreWater = true
 
     local result = workspace:Raycast(origin, targetPos - origin, rayParams)
+    
     if result then
         if result.Instance:IsDescendantOf(targetChar) then return true else return false end
     end
@@ -122,7 +176,19 @@ local function IsTeammate(p)
     return false
 end
 
--- [[ 4. 方框透視 ]]
+-- [[ 4. 穿牆系統 (Stepped) ]]
+-- ⚡ 穿牆必須放在 Stepped 裡面不斷覆寫，才能對抗 Roblox 原生的物理碰撞恢復
+RunService.Stepped:Connect(function()
+    if Settings.Noclip and LocalPlayer.Character then
+        for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
+            if part:IsA("BasePart") and part.CanCollide then
+                part.CanCollide = false
+            end
+        end
+    end
+end)
+
+-- [[ 5. 方框透視 ]]
 local ESP_Boxes = {}
 local function UpdateESP()
     for _, p in pairs(Players:GetPlayers()) do
@@ -158,9 +224,8 @@ local function UpdateESP()
     end
 end
 
--- [[ 5. 目標尋找核心 ]]
+-- [[ 6. 核心：物理模擬 + 死鎖記憶 + 飛行物理運算 ]]
 local LockedTarget = nil 
-local SilentAimTarget = nil
 
 local function FindNewTarget()
     local target, maxDist = nil, Settings.FOV
@@ -182,59 +247,34 @@ local function FindNewTarget()
     return target
 end
 
--- [[ 6. ⚡ 絕對安全的雙重攔截吸附 (Hook) ]]
--- 攔截 1: 修改遊戲發出的物理射線 (Raycast)
-local oldNamecall
-oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
-    local method = getnamecallmethod()
-    if Settings.SilentAim and method == "Raycast" and not checkcaller() then
-        local args = {...}
-        -- 嚴格型別檢查，防止 Xeno 崩潰
-        if typeof(args[1]) == "Vector3" and typeof(args[2]) == "Vector3" then
-            if SilentAimTarget and SilentAimTarget:FindFirstChild("Head") and SilentAimTarget:FindFirstChild("HumanoidRootPart") then
-                local origin = args[1]
-                local targetPos = SilentAimTarget.Head.Position + (SilentAimTarget.HumanoidRootPart.Velocity * Settings.Prediction)
-                -- 保持射線原本的長度，只改變方向
-                args[2] = (targetPos - origin).Unit * args[2].Magnitude
-                return oldNamecall(self, unpack(args))
-            end
-        end
-    end
-    return oldNamecall(self, ...)
-end)
-
--- 攔截 2: 修改滑鼠取得的 3D 座標 (Mouse.Hit)
-local oldIndex
-oldIndex = hookmetamethod(game, "__index", function(self, key)
-    if Settings.SilentAim and not checkcaller() and self == Mouse then
-        if key == "Hit" or key == "hit" then
-            if SilentAimTarget and SilentAimTarget:FindFirstChild("Head") and SilentAimTarget:FindFirstChild("HumanoidRootPart") then
-                local targetPos = SilentAimTarget.Head.Position + (SilentAimTarget.HumanoidRootPart.Velocity * Settings.Prediction)
-                return CFrame.new(targetPos)
-            end
-        elseif key == "Target" or key == "target" then
-            if SilentAimTarget and SilentAimTarget:FindFirstChild("Head") then
-                return SilentAimTarget.Head
-            end
-        end
-    end
-    return oldIndex(self, key)
-end)
-
--- [[ 7. 每幀執行邏輯 ]]
 RunService.RenderStepped:Connect(function()
     UpdateESP()
 
-    -- 隨時更新給子彈吸附用的目標
-    if Settings.SilentAim then
-        SilentAimTarget = FindNewTarget()
-    else
-        SilentAimTarget = nil
+    -- ⚡ 飛行物理更新 (依照視角方向移動)
+    if Settings.Fly and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        if FlyBodyGyro and FlyBodyVelocity then
+            local camCF = Camera.CFrame
+            FlyBodyGyro.cframe = camCF -- 身體跟著視角轉
+            
+            local moveDir = Vector3.new(0, 0, 0)
+            moveDir = moveDir + camCF.LookVector * (CONTROL.F + CONTROL.B)
+            moveDir = moveDir + camCF.RightVector * (CONTROL.L + CONTROL.R)
+            moveDir = moveDir + camCF.UpVector * (CONTROL.UP + CONTROL.DOWN)
+
+            if moveDir.Magnitude > 0 then
+                FlyBodyVelocity.velocity = moveDir.Unit * Settings.FlySpeed
+            else
+                FlyBodyVelocity.velocity = Vector3.new(0, 0, 0)
+            end
+        end
     end
 
-    -- 物理死鎖 (右鍵)
+    -- 鎖頭邏輯
     if Settings.Aimbot and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
-        if not LockedTarget then LockedTarget = FindNewTarget() end
+        
+        if not LockedTarget then
+            LockedTarget = FindNewTarget()
+        end
 
         if LockedTarget and LockedTarget:FindFirstChild("Head") and LockedTarget:FindFirstChild("Humanoid") and LockedTarget.Humanoid.Health > 0 then
             
@@ -248,6 +288,7 @@ RunService.RenderStepped:Connect(function()
             
             if onScreen then
                 local mousePos = UserInputService:GetMouseLocation()
+                
                 if mousemoverel then
                     local moveX = (screenPos.X - mousePos.X) * Settings.Smoothness
                     local moveY = (screenPos.Y - mousePos.Y) * Settings.Smoothness
@@ -255,13 +296,26 @@ RunService.RenderStepped:Connect(function()
                 else
                     Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, headPos)
                 end
-            else LockedTarget = nil end
-        else LockedTarget = nil end
-    else LockedTarget = nil end
+            else
+                LockedTarget = nil 
+            end
+        else
+            LockedTarget = nil 
+        end
+    else
+        LockedTarget = nil 
+    end
+end)
+
+-- 角色重生或死亡時關閉飛行，防止 Bug
+LocalPlayer.CharacterAdded:Connect(function()
+    if Settings.Fly then
+        Settings.Fly = false
+        -- 觸發 UI 更新 (選單打開時手動點掉，或重開選單)
+    end
 end)
 
 Players.PlayerRemoving:Connect(function(plr)
     if ESP_Boxes[plr] then ESP_Boxes[plr]:Remove() ESP_Boxes[plr] = nil end
     if LockedTarget and LockedTarget.Name == plr.Name then LockedTarget = nil end
-    if SilentAimTarget and SilentAimTarget.Name == plr.Name then SilentAimTarget = nil end
 end)
