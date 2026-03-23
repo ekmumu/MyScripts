@@ -19,7 +19,7 @@ local Settings = {
     FOV = 250,
     MaxDistance = 350,
     Smoothness = 1,
-    AimbotSens = 2.0 -- ⚡ 新增：靈敏度補償 (放大滑鼠推力，數值越大鎖越死)
+    AimbotSens = 1.5 -- ⚡ 新增：靈敏度補償 (放大滑鼠推力，數值越大鎖越死)
 }
 
 -- [[ 1. 絕對中心固定 UI ]]
