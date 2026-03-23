@@ -1,30 +1,28 @@
--- ==========================================
--- MUMU RIVALS - 絕對防崩潰面板 + 虛擬開火 + 物理硬鎖
--- ==========================================
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
-local VirtualInputManager = game:GetService("VirtualInputManager") -- ⚡ 最安全的按鍵模擬器
+local VirtualInputManager = game:GetService("VirtualInputManager") 
 local Camera = workspace.CurrentCamera
 local LocalPlayer = Players.LocalPlayer
 
 local Settings = {
     ESP = true,
     Aimbot = true,
-    AutoFire = false,  -- ⚡ 自動開火
+    AutoFire = false,  
     TeamCheck = true,  
     WallCheck = true,  
     Fly = false,       
     Noclip = false,    
-    FlySpeed = 100,    -- 面板可調
+    FlySpeed = 100,    
     Prediction = 0.12, 
-    FOV = 250,         -- 面板可調
+    FOV = 250,         
     MaxDistance = 350,
     Smoothness = 1,    
-    AimbotSens = 1.5   -- 面板可調
+    AimbotSens = 1.5   
 }
 
--- [[ 1. 專業 UI 建立 (防崩潰微調面板) ]]
+
 local SafeGui = (gethui and gethui()) or game:GetService("CoreGui")
 if SafeGui:FindFirstChild("MUMU_PHYSICS_LOCK") then
     SafeGui.MUMU_PHYSICS_LOCK:Destroy()
@@ -45,23 +43,23 @@ Instance.new("UIStroke", Main).Color = Color3.fromRGB(255, 0, 0)
 
 local Title = Instance.new("TextLabel", Main)
 Title.Size = UDim2.new(1, 0, 0, 60)
-Title.Text = "⚡ MUMU CORE"
+Title.Text = "⚡ MUMU PRO"
 Title.TextSize = 28
 Title.Font = Enum.Font.GothamBlack
 Title.TextColor3 = Color3.new(1, 1, 1)
 Title.BackgroundTransparency = 1
 
--- 滾動視窗
+
 local Container = Instance.new("ScrollingFrame", Main)
 Container.Size = UDim2.new(0.9, 0, 1, -100)
 Container.Position = UDim2.fromScale(0.05, 0.12)
 Container.BackgroundTransparency = 1
 Container.ScrollBarThickness = 2
-Container.CanvasSize = UDim2.new(0, 0, 1.8, 0) -- 確保高度足夠
+Container.CanvasSize = UDim2.new(0, 0, 1.8, 0) 
 local Layout = Instance.new("UIListLayout", Container)
 Layout.Padding = UDim.new(0, 8)
 
--- [ 創建開關按鈕 ]
+
 local function AddToggle(name, settingKey, customCallback)
     local btn = Instance.new("TextButton", Container)
     btn.Size = UDim2.new(1, -10, 0, 45)
@@ -80,7 +78,7 @@ local function AddToggle(name, settingKey, customCallback)
     end)
 end
 
--- [ ⚡ 創建數值微調器 (絕不崩潰版) ]
+
 local function AddAdjuster(name, settingKey, step, min, max)
     local frame = Instance.new("Frame", Container)
     frame.Size = UDim2.new(1, -10, 0, 45)
@@ -141,7 +139,7 @@ local function AddAdjuster(name, settingKey, step, min, max)
     end)
 end
 
--- [[ 飛行系統 ]]
+
 local FlyBodyGyro, FlyBodyVelocity
 local CONTROL = {F = 0, B = 0, L = 0, R = 0, UP = 0, DOWN = 0}
 
@@ -168,16 +166,16 @@ local function UpdateFlyState(state)
     end
 end
 
--- ⚡ UI 元素生成
+
 AddToggle("方框與血條 (ESP)", "ESP")
 AddToggle("物理硬鎖 (右鍵)", "Aimbot")
-AddToggle("自動開火 (鎖定時)", "AutoFire") -- ⚡ 新增開火
+AddToggle("自動開火 (鎖定時)", "AutoFire")
 AddToggle("不瞄隊友 (Team)", "TeamCheck")
 AddToggle("隔牆不瞄 (Wall)", "WallCheck")
 AddToggle("飛行模式 (Fly)", "Fly", UpdateFlyState) 
 AddToggle("穿牆模式 (Noclip)", "Noclip")           
 
--- ⚡ 加入安全微調器
+
 AddAdjuster("飛行速度", "FlySpeed", 20, 20, 300)
 AddAdjuster("鎖頭推力", "AimbotSens", 0.5, 0.5, 5.0)
 AddAdjuster("FOV 範圍", "FOV", 25, 50, 800)
@@ -191,7 +189,7 @@ Hint.TextSize = 13
 Hint.Font = Enum.Font.Gotham
 Hint.BackgroundTransparency = 1
 
--- [[ 2. 按鍵監聽 ]]
+
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if not gameProcessed and input.KeyCode == Enum.KeyCode.J then
         Main.Visible = not Main.Visible
@@ -217,7 +215,7 @@ UserInputService.InputEnded:Connect(function(input, gameProcessed)
     elseif k == Enum.KeyCode.LeftControl then CONTROL.DOWN = 0 end
 end)
 
--- [[ 3. 過濾邏輯 ]]
+
 local function IsVisible(targetChar)
     if not Settings.WallCheck then return true end
     if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("Head") then return true end
@@ -238,7 +236,7 @@ local function IsTeammate(p)
     return false
 end
 
--- [[ 4. 穿牆系統 (Stepped) ]]
+
 RunService.Stepped:Connect(function()
     if Settings.Noclip and LocalPlayer.Character then
         for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
@@ -247,7 +245,7 @@ RunService.Stepped:Connect(function()
     end
 end)
 
--- [[ 5. ESP (方框 + 動態血量條) ]]
+
 local ESP_Drawings = {}
 local function UpdateESP()
     for _, p in pairs(Players:GetPlayers()) do
@@ -283,7 +281,7 @@ local function UpdateESP()
     end
 end
 
--- [[ 6. 核心：物理模擬 + 虛擬開火 + 飛行 ]]
+
 local LockedTarget = nil 
 local isAutoFiring = false
 
@@ -309,7 +307,7 @@ end
 RunService.RenderStepped:Connect(function()
     UpdateESP()
 
-    -- 飛行物理更新
+    
     if Settings.Fly and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
         if FlyBodyGyro and FlyBodyVelocity then
             local camCF = Camera.CFrame
@@ -322,7 +320,7 @@ RunService.RenderStepped:Connect(function()
         end
     end
 
-    -- 鎖頭邏輯
+   
     if Settings.Aimbot and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
         if not LockedTarget then LockedTarget = FindNewTarget() end
 
@@ -342,13 +340,13 @@ RunService.RenderStepped:Connect(function()
             if onScreen then
                 local mousePos = UserInputService:GetMouseLocation()
                 
-                -- ⚡ 絕對安全的虛擬自動開火
+              
                 if Settings.AutoFire then
                     local dist = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
                     if dist < 45 then 
                         if not isAutoFiring then
                             isAutoFiring = true
-                            -- 使用 task.spawn 避免卡死渲染線程
+                            
                             task.spawn(function() VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 1) end)
                         end
                     else
