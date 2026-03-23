@@ -1,5 +1,6 @@
-
-
+-- ==========================================
+-- MUMU PRO (V30) - 獨立功能解綁 + 血條渲染修復 + 扳機範圍微調
+-- ==========================================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -7,7 +8,7 @@ local VirtualInputManager = game:GetService("VirtualInputManager")
 local Camera = workspace.CurrentCamera
 local LocalPlayer = Players.LocalPlayer
 
-
+-- [[ 0. 核心防禦：全局清理系統 ]]
 if _G.MUMU_PRO_CONNECTION then 
     _G.MUMU_PRO_CONNECTION:Disconnect() 
 end
@@ -23,10 +24,11 @@ _G.MUMU_ESP_DRAWINGS = {}
 
 local Settings = {
     ESP = true,
-    Aimbot = true,       
-    TriggerBot = false,   
-    AutoFire_Hip = false, 
-    AutoFire_ADS = false,
+    Aimbot = true,        -- 純實體鎖頭 (不開火)
+    TriggerBot = false,   -- 純扳機 (不鎖頭，指到就開火)
+    TriggerRadius = 15,   -- ⚡ 新增：扳機判定範圍
+    AutoFire_ADS = false, -- 開鏡鎖頭 + 開火
+    AutoFire_Hip = false, -- 盲射鎖頭 + 開火
     TeamCheck = true,  
     WallCheck = true,  
     Fly = false,       
@@ -48,7 +50,7 @@ ScreenGui.Name = "MUMU_PHYSICS_LOCK"
 ScreenGui.ResetOnSpawn = false
 
 local Main = Instance.new("Frame", ScreenGui)
-Main.Size = UDim2.fromOffset(330, 650)
+Main.Size = UDim2.fromOffset(340, 680)
 Main.Position = UDim2.fromScale(0.5, 0.5)
 Main.AnchorPoint = Vector2.new(0.5, 0.5)
 Main.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
@@ -71,7 +73,7 @@ Container.Size = UDim2.new(0.9, 0, 1, -100)
 Container.Position = UDim2.fromScale(0.05, 0.12)
 Container.BackgroundTransparency = 1
 Container.ScrollBarThickness = 2
-Container.CanvasSize = UDim2.new(0, 0, 2, 0) 
+Container.CanvasSize = UDim2.new(0, 0, 2.2, 0) 
 
 local Layout = Instance.new("UIListLayout", Container)
 Layout.Padding = UDim.new(0, 8)
@@ -81,7 +83,7 @@ local function AddToggle(name, settingKey)
     btn.Size = UDim2.new(1, -10, 0, 45)
     btn.BackgroundColor3 = Settings[settingKey] and Color3.fromRGB(200, 0, 0) or Color3.fromRGB(45, 45, 45)
     btn.Text = name .. ": " .. (Settings[settingKey] and "ON" or "OFF")
-    btn.TextSize = 16
+    btn.TextSize = 15
     btn.Font = Enum.Font.GothamBold
     btn.TextColor3 = Color3.new(1, 1, 1)
     Instance.new("UICorner", btn)
@@ -105,7 +107,7 @@ local function AddAdjuster(name, settingKey, step, min, max)
     title.Text = name
     title.TextColor3 = Color3.new(1, 1, 1)
     title.Font = Enum.Font.GothamBold
-    title.TextSize = 14
+    title.TextSize = 13
     title.TextXAlignment = Enum.TextXAlignment.Left
     title.BackgroundTransparency = 1
     
@@ -115,7 +117,7 @@ local function AddAdjuster(name, settingKey, step, min, max)
     valText.Text = tostring(Settings[settingKey])
     valText.TextColor3 = Color3.new(1, 1, 1)
     valText.Font = Enum.Font.GothamBold
-    valText.TextSize = 15
+    valText.TextSize = 14
     valText.BackgroundTransparency = 1
     
     local btnMinus = Instance.new("TextButton", frame)
@@ -153,7 +155,7 @@ local function AddAdjuster(name, settingKey, step, min, max)
     end)
 end
 
-
+-- [[ 飛行系統控制 ]]
 local FlyBodyGyro, FlyBodyVelocity
 local CONTROL = {F = 0, B = 0, L = 0, R = 0, UP = 0, DOWN = 0}
 
@@ -188,7 +190,7 @@ local function UpdateFlyState(state)
     end
 end
 
-
+-- UI 按鈕生成
 AddToggle("方框與血條 (ESP)", "ESP")
 AddToggle("實體滑鼠鎖頭 (右鍵瞄準)", "Aimbot") 
 AddToggle("純扳機 (指到敵人自動開火)", "TriggerBot") 
@@ -200,6 +202,7 @@ AddToggle("飛行模式常駐 (Fly)", "Fly")
 AddToggle("穿牆模式 (Noclip)", "Noclip")           
 
 AddAdjuster("鎖頭推力 (太抖請調低)", "AimbotSens", 0.1, 0.1, 2.0)
+AddAdjuster("扳機判定範圍", "TriggerRadius", 5, 5, 100) -- ⚡ 新增扳機範圍調節
 AddAdjuster("飛行速度", "FlySpeed", 20, 20, 300)
 AddAdjuster("FOV 鎖定範圍", "FOV", 25, 50, 800)
 
@@ -277,26 +280,25 @@ RunService.Stepped:Connect(function()
     end
 end)
 
-
+-- [[ 5. 堅若磐石的 ESP 系統 (血條渲染徹底改寫) ]]
 local function UpdateESP()
     for _, p in pairs(Players:GetPlayers()) do
         if p ~= LocalPlayer then
             if not _G.MUMU_ESP_DRAWINGS[p] then
+                -- ⚡ 把血條改成 Line (線條)，絕對不會再有矩形破圖問題
                 _G.MUMU_ESP_DRAWINGS[p] = { 
                     Box = Drawing.new("Square"), 
-                    HealthBg = Drawing.new("Square"), 
-                    HealthBar = Drawing.new("Square") 
+                    HealthBg = Drawing.new("Line"), 
+                    HealthBar = Drawing.new("Line") 
                 }
                 _G.MUMU_ESP_DRAWINGS[p].Box.Color = Color3.fromRGB(255, 50, 50)
                 _G.MUMU_ESP_DRAWINGS[p].Box.Thickness = 1.5
                 _G.MUMU_ESP_DRAWINGS[p].Box.Filled = false
                 
                 _G.MUMU_ESP_DRAWINGS[p].HealthBg.Color = Color3.fromRGB(0, 0, 0)
-                _G.MUMU_ESP_DRAWINGS[p].HealthBg.Thickness = 1
-                _G.MUMU_ESP_DRAWINGS[p].HealthBg.Filled = true
+                _G.MUMU_ESP_DRAWINGS[p].HealthBg.Thickness = 4
                 
-                _G.MUMU_ESP_DRAWINGS[p].HealthBar.Thickness = 1
-                _G.MUMU_ESP_DRAWINGS[p].HealthBar.Filled = true
+                _G.MUMU_ESP_DRAWINGS[p].HealthBar.Thickness = 2
             end
 
             local drawings = _G.MUMU_ESP_DRAWINGS[p]
@@ -325,7 +327,7 @@ local function UpdateESP()
                             drawings.Box.Position = Vector2.new(centerPos.X - width/2, topPos.Y)
                             drawings.Box.Visible = true
                             
-                            
+                            -- 嚴格血量計算
                             local health = tonumber(p.Character.Humanoid.Health) or 0
                             local maxHealth = tonumber(p.Character.Humanoid.MaxHealth) or 100
                             if maxHealth <= 0 then maxHealth = 100 end
@@ -333,36 +335,31 @@ local function UpdateESP()
                             local healthPercent = math.clamp(health / maxHealth, 0, 1)
                             if healthPercent ~= healthPercent then healthPercent = 1 end
                             
-                            drawings.HealthBg.Size = Vector2.new(4, height)
-                            drawings.HealthBg.Position = Vector2.new(centerPos.X - width/2 - 6, topPos.Y)
+                            -- ⚡ 使用 Line (由下往上畫)，完美防破圖
+                            local barX = centerPos.X - width/2 - 6
+                            
+                            drawings.HealthBg.From = Vector2.new(barX, bottomPos.Y)
+                            drawings.HealthBg.To = Vector2.new(barX, topPos.Y)
                             drawings.HealthBg.Visible = true
                             
                             local barHeight = height * healthPercent
-                            drawings.HealthBar.Size = Vector2.new(2, barHeight)
-                            drawings.HealthBar.Position = Vector2.new(centerPos.X - width/2 - 5, topPos.Y + (height - barHeight))
+                            drawings.HealthBar.From = Vector2.new(barX, bottomPos.Y)
+                            drawings.HealthBar.To = Vector2.new(barX, bottomPos.Y - barHeight)
                             drawings.HealthBar.Color = Color3.fromHSV(healthPercent * 0.3, 1, 1)
                             drawings.HealthBar.Visible = true
                         else 
-                            drawings.Box.Visible = false
-                            drawings.HealthBg.Visible = false
-                            drawings.HealthBar.Visible = false 
+                            drawings.Box.Visible = false; drawings.HealthBg.Visible = false; drawings.HealthBar.Visible = false 
                         end
                     else 
-                        drawings.Box.Visible = false
-                        drawings.HealthBg.Visible = false
-                        drawings.HealthBar.Visible = false 
+                        drawings.Box.Visible = false; drawings.HealthBg.Visible = false; drawings.HealthBar.Visible = false 
                     end
                 else 
-                    drawings.Box.Visible = false
-                    drawings.HealthBg.Visible = false
-                    drawings.HealthBar.Visible = false 
+                    drawings.Box.Visible = false; drawings.HealthBg.Visible = false; drawings.HealthBar.Visible = false 
                 end
             end)
             
             if not success then 
-                drawings.Box.Visible = false
-                drawings.HealthBg.Visible = false
-                drawings.HealthBar.Visible = false 
+                drawings.Box.Visible = false; drawings.HealthBg.Visible = false; drawings.HealthBar.Visible = false 
             end
         end
     end
@@ -409,41 +406,31 @@ local function FindNewTarget()
     return target
 end
 
-
+-- [[ 6. 核心引擎 (完美解綁 Aimbot 與 AutoFire) ]]
 _G.MUMU_PRO_CONNECTION = RunService.RenderStepped:Connect(function()
     UpdateESP()
 
-    
+    -- 飛行引擎
     if Settings.Fly and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
         local hrp = LocalPlayer.Character.HumanoidRootPart
-        local gyro = hrp:FindFirstChild("MUMU_GYRO")
-        local vel = hrp:FindFirstChild("MUMU_VELOCITY")
-        
+        local gyro = hrp:FindFirstChild("MUMU_GYRO"); local vel = hrp:FindFirstChild("MUMU_VELOCITY")
         if gyro and vel then
             local camCF = Camera.CFrame
             gyro.cframe = camCF
-            
             local moveDir = Vector3.new(0, 0, 0)
             moveDir = moveDir + camCF.LookVector * (CONTROL.F + CONTROL.B)
             moveDir = moveDir + camCF.RightVector * (CONTROL.L + CONTROL.R)
             moveDir = moveDir + camCF.UpVector * (CONTROL.UP + CONTROL.DOWN)
-            
-            if moveDir.Magnitude > 0 then 
-                vel.velocity = moveDir.Unit * Settings.FlySpeed 
-            else 
-                vel.velocity = Vector3.new(0, 0, 0) 
-            end
+            if moveDir.Magnitude > 0 then vel.velocity = moveDir.Unit * Settings.FlySpeed else vel.velocity = Vector3.new(0, 0, 0) end
         end
     end
 
     local isRightClicking = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
     
-   
+    -- 只要開啟了任一戰鬥功能，就啟動尋敵
     if Settings.Aimbot or Settings.AutoFire_Hip or Settings.AutoFire_ADS or Settings.TriggerBot then
         
-        if not LockedTarget then 
-            LockedTarget = FindNewTarget() 
-        end
+        if not LockedTarget then LockedTarget = FindNewTarget() end
 
         if LockedTarget and LockedTarget:FindFirstChild("Head") and LockedTarget:FindFirstChild("Humanoid") and LockedTarget.Humanoid.Health > 0 then
             
@@ -461,31 +448,26 @@ _G.MUMU_PRO_CONNECTION = RunService.RenderStepped:Connect(function()
                 local deltaY = screenPos.Y - screenCenter.Y
                 local distToCenter = math.sqrt(deltaX^2 + deltaY^2)
 
-              
-                if Settings.Aimbot and (isRightClicking or Settings.AutoFire_Hip) then
+                -- ⚡ 判斷是否需要「移動滑鼠 (鎖頭)」
+                local shouldAim = false
+                if Settings.Aimbot and isRightClicking then shouldAim = true end
+                if Settings.AutoFire_ADS and isRightClicking then shouldAim = true end
+                if Settings.AutoFire_Hip then shouldAim = true end -- 不開鏡暴力模式，隨時都在鎖
+
+                -- 執行鎖頭推動
+                if shouldAim then
                     if mousemoverel then
                         mousemoverel(deltaX * Settings.AimbotSens, deltaY * Settings.AimbotSens)
                     end
                 end
 
-                
+                -- ⚡ 判斷是否需要「開火」
                 local shouldFire = false
-                
-               
-                if Settings.AutoFire_ADS and isRightClicking then 
-                    shouldFire = true 
-                end
-                
-                
-                if Settings.AutoFire_Hip and not isRightClicking then 
-                    shouldFire = true 
-                end
-                
-                
-                if Settings.TriggerBot and distToCenter <= 40 then 
-                    shouldFire = true 
-                end
+                if Settings.AutoFire_ADS and isRightClicking then shouldFire = true end
+                if Settings.AutoFire_Hip then shouldFire = true end
+                if Settings.TriggerBot and distToCenter <= Settings.TriggerRadius then shouldFire = true end
 
+                -- 執行開火
                 if shouldFire then
                     if tick() - lastRapidFire > 0.05 then
                         FireWeapon()
@@ -505,9 +487,7 @@ end)
 
 LocalPlayer.CharacterAdded:Connect(function(newChar)
     task.delay(0.5, function()
-        if Settings.Fly and newChar:FindFirstChild("HumanoidRootPart") then 
-            UpdateFlyState(true) 
-        end
+        if Settings.Fly and newChar:FindFirstChild("HumanoidRootPart") then UpdateFlyState(true) end
     end)
 end)
 
@@ -518,7 +498,5 @@ Players.PlayerRemoving:Connect(function(plr)
         _G.MUMU_ESP_DRAWINGS[plr].HealthBar:Remove()
         _G.MUMU_ESP_DRAWINGS[plr] = nil 
     end
-    if LockedTarget and LockedTarget.Name == plr.Name then 
-        LockedTarget = nil 
-    end
+    if LockedTarget and LockedTarget.Name == plr.Name then LockedTarget = nil end
 end)
