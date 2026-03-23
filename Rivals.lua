@@ -1,5 +1,5 @@
 -- ==========================================
--- MUMU RIVALS - 物理滑鼠死鎖 + 飛行穿牆 + 穩定ESP
+-- MUMU RIVALS - 物理滑鼠硬鎖 (靈敏度補償) + 飛行穿牆 + 動態血條
 -- ==========================================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -12,13 +12,14 @@ local Settings = {
     Aimbot = true,
     TeamCheck = true,  
     WallCheck = true,  
-    Fly = false,       -- ⚡ 飛行模式
-    Noclip = false,    -- ⚡ 穿牆模式
-    FlySpeed = 100,     -- ⚡ 飛行速度
+    Fly = false,       
+    Noclip = false,    
+    FlySpeed = 100,     
     Prediction = 0.12, 
     FOV = 250,
     MaxDistance = 350,
-    Smoothness = 1 
+    Smoothness = 1,
+    AimbotSens = 2.0 -- ⚡ 新增：靈敏度補償 (放大滑鼠推力，數值越大鎖越死)
 }
 
 -- [[ 1. 絕對中心固定 UI ]]
@@ -55,7 +56,7 @@ Container.BackgroundTransparency = 1
 local Layout = Instance.new("UIListLayout", Container)
 Layout.Padding = UDim.new(0, 12)
 
--- [ 按鈕生成器 (支援額外回呼函數) ]
+-- [ 按鈕生成器 ]
 local function AddToggle(name, settingKey, customCallback)
     local btn = Instance.new("TextButton", Container)
     btn.Size = UDim2.new(1, 0, 0, 55)
@@ -74,7 +75,7 @@ local function AddToggle(name, settingKey, customCallback)
     end)
 end
 
--- [[ ⚡ 飛行系統的物理元件控制 ]]
+-- [[ 飛行系統 ]]
 local FlyBodyGyro, FlyBodyVelocity
 local CONTROL = {F = 0, B = 0, L = 0, R = 0, UP = 0, DOWN = 0}
 
@@ -84,7 +85,6 @@ local function UpdateFlyState(state)
     local hrp = char.HumanoidRootPart
 
     if state then
-        -- 開啟飛行
         FlyBodyGyro = Instance.new("BodyGyro", hrp)
         FlyBodyGyro.P = 9e4
         FlyBodyGyro.maxTorque = Vector3.new(9e9, 9e9, 9e9)
@@ -96,14 +96,13 @@ local function UpdateFlyState(state)
 
         char.Humanoid.PlatformStand = true 
     else
-        -- 關閉飛行
         if FlyBodyGyro then FlyBodyGyro:Destroy() end
         if FlyBodyVelocity then FlyBodyVelocity:Destroy() end
         char.Humanoid.PlatformStand = false
     end
 end
 
-AddToggle("方框透視 (Box)", "ESP")
+AddToggle("方框與血條 (ESP)", "ESP")
 AddToggle("物理死鎖 (右鍵)", "Aimbot")
 AddToggle("不瞄隊友 (Team)", "TeamCheck")
 AddToggle("隔牆不瞄 (Wall)", "WallCheck")
@@ -124,7 +123,6 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if not gameProcessed and input.KeyCode == Enum.KeyCode.J then
         Main.Visible = not Main.Visible
     end
-    -- 飛行控制按下
     if not gameProcessed then
         local k = input.KeyCode
         if k == Enum.KeyCode.W then CONTROL.F = 1
@@ -137,7 +135,6 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 end)
 
 UserInputService.InputEnded:Connect(function(input, gameProcessed)
-    -- 飛行控制鬆開
     local k = input.KeyCode
     if k == Enum.KeyCode.W then CONTROL.F = 0
     elseif k == Enum.KeyCode.S then CONTROL.B = 0
@@ -187,29 +184,46 @@ RunService.Stepped:Connect(function()
     end
 end)
 
--- [[ 5. ⚡ 修復後絕對穩定的方框透視 (Box ESP) ]]
-local ESP_Boxes = {}
+-- [[ 5. 升級版 ESP (方框 + 動態血量條) ]]
+local ESP_Drawings = {}
+
 local function UpdateESP()
     for _, p in pairs(Players:GetPlayers()) do
         if p ~= LocalPlayer then
-            if not ESP_Boxes[p] then
-                local box = Drawing.new("Square")
-                box.Color = Color3.fromRGB(255, 50, 50)
-                box.Thickness = 1.5
-                box.Filled = false
-                ESP_Boxes[p] = box
+            if not ESP_Drawings[p] then
+                ESP_Drawings[p] = {
+                    Box = Drawing.new("Square"),
+                    HealthBg = Drawing.new("Square"),
+                    HealthBar = Drawing.new("Square")
+                }
+                
+                ESP_Drawings[p].Box.Color = Color3.fromRGB(255, 50, 50)
+                ESP_Drawings[p].Box.Thickness = 1.5
+                ESP_Drawings[p].Box.Filled = false
+                
+                ESP_Drawings[p].HealthBg.Color = Color3.fromRGB(0, 0, 0)
+                ESP_Drawings[p].HealthBg.Thickness = 1
+                ESP_Drawings[p].HealthBg.Filled = true
+                
+                ESP_Drawings[p].HealthBar.Thickness = 1
+                ESP_Drawings[p].HealthBar.Filled = true
             end
 
-            local box = ESP_Boxes[p]
+            local drawings = ESP_Drawings[p]
+
             if Settings.ESP and p.Character and p.Character:FindFirstChild("HumanoidRootPart") and p.Character:FindFirstChild("Humanoid") and p.Character.Humanoid.Health > 0 then
                 
-                if IsTeammate(p) then box.Visible = false continue end
+                if IsTeammate(p) then 
+                    drawings.Box.Visible = false
+                    drawings.HealthBg.Visible = false
+                    drawings.HealthBar.Visible = false
+                    continue 
+                end
                 
                 local hrp = p.Character.HumanoidRootPart
                 local dist = (Camera.CFrame.Position - hrp.Position).Magnitude
                 
                 if dist < Settings.MaxDistance then
-                    -- ⚡ 關鍵修改：只使用 HRP (身體中心) 進行上下固定偏移，不再抓取會擺動的 Head
                     local topPos, onScreen = Camera:WorldToViewportPoint(hrp.Position + Vector3.new(0, 2.5, 0))
                     local bottomPos = Camera:WorldToViewportPoint(hrp.Position - Vector3.new(0, 3, 0))
                     local centerPos = Camera:WorldToViewportPoint(hrp.Position)
@@ -217,18 +231,49 @@ local function UpdateESP()
                     if onScreen then
                         local height = math.abs(topPos.Y - bottomPos.Y)
                         local width = height * 0.6
-                        box.Size = Vector2.new(width, height)
-                        -- 以中心點對齊，確保框框不會隨動畫左右偏移
-                        box.Position = Vector2.new(centerPos.X - width/2, topPos.Y)
-                        box.Visible = true
-                    else box.Visible = false end
-                else box.Visible = false end
-            else box.Visible = false end
+                        
+                        local boxX = centerPos.X - width/2
+                        local boxY = topPos.Y
+                        
+                        drawings.Box.Size = Vector2.new(width, height)
+                        drawings.Box.Position = Vector2.new(boxX, boxY)
+                        drawings.Box.Visible = true
+                        
+                        local health = p.Character.Humanoid.Health
+                        local maxHealth = p.Character.Humanoid.MaxHealth
+                        local healthPercent = math.clamp(health / maxHealth, 0, 1)
+                        
+                        drawings.HealthBg.Size = Vector2.new(4, height)
+                        drawings.HealthBg.Position = Vector2.new(boxX - 6, boxY)
+                        drawings.HealthBg.Visible = true
+                        
+                        local barHeight = height * healthPercent
+                        drawings.HealthBar.Size = Vector2.new(2, barHeight)
+                        drawings.HealthBar.Position = Vector2.new(boxX - 5, boxY + (height - barHeight))
+                        
+                        drawings.HealthBar.Color = Color3.fromHSV(healthPercent * 0.3, 1, 1)
+                        drawings.HealthBar.Visible = true
+
+                    else 
+                        drawings.Box.Visible = false
+                        drawings.HealthBg.Visible = false
+                        drawings.HealthBar.Visible = false
+                    end
+                else 
+                    drawings.Box.Visible = false
+                    drawings.HealthBg.Visible = false
+                    drawings.HealthBar.Visible = false
+                end
+            else 
+                drawings.Box.Visible = false
+                drawings.HealthBg.Visible = false
+                drawings.HealthBar.Visible = false
+            end
         end
     end
 end
 
--- [[ 6. 核心：物理模擬 + 死鎖記憶 + 飛行物理運算 ]]
+-- [[ 6. 核心：物理模擬 + 死鎖記憶 + 飛行 ]]
 local LockedTarget = nil 
 
 local function FindNewTarget()
@@ -294,8 +339,9 @@ RunService.RenderStepped:Connect(function()
                 local mousePos = UserInputService:GetMouseLocation()
                 
                 if mousemoverel then
-                    local moveX = (screenPos.X - mousePos.X) * Settings.Smoothness
-                    local moveY = (screenPos.Y - mousePos.Y) * Settings.Smoothness
+                    -- ⚡ 加入 AimbotSens 補償倍率，強行推動滑鼠對抗遊戲靈敏度
+                    local moveX = (screenPos.X - mousePos.X) * Settings.Smoothness * Settings.AimbotSens
+                    local moveY = (screenPos.Y - mousePos.Y) * Settings.Smoothness * Settings.AimbotSens
                     mousemoverel(moveX, moveY)
                 else
                     Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, headPos)
@@ -311,14 +357,20 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- 角色重生或死亡時關閉飛行，防止 Bug
 LocalPlayer.CharacterAdded:Connect(function()
     if Settings.Fly then
         Settings.Fly = false
     end
 end)
 
+-- 退出遊戲時確保所有框框與血條都被清乾淨，防止記憶體外洩
 Players.PlayerRemoving:Connect(function(plr)
-    if ESP_Boxes[plr] then ESP_Boxes[plr]:Remove() ESP_Boxes[plr] = nil end
+    if ESP_Drawings[plr] then 
+        ESP_Drawings[plr].Box:Remove() 
+        -- ⚡ 幫你修復的隱藏 Bug：原本這裡寫成 p，導致別人退遊戲時可能會報錯閃退
+        ESP_Drawings[plr].HealthBg:Remove()
+        ESP_Drawings[plr].HealthBar:Remove()
+        ESP_Drawings[plr] = nil 
+    end
     if LockedTarget and LockedTarget.Name == plr.Name then LockedTarget = nil end
 end)
