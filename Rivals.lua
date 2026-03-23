@@ -1,6 +1,5 @@
--- ==========================================
--- MUMU PRO (V29) - 完整展開版 (最高相容性注入)
--- ==========================================
+
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -8,7 +7,7 @@ local VirtualInputManager = game:GetService("VirtualInputManager")
 local Camera = workspace.CurrentCamera
 local LocalPlayer = Players.LocalPlayer
 
--- [[ 0. 核心防禦：全局清理系統 ]]
+
 if _G.MUMU_PRO_CONNECTION then 
     _G.MUMU_PRO_CONNECTION:Disconnect() 
 end
@@ -24,10 +23,10 @@ _G.MUMU_ESP_DRAWINGS = {}
 
 local Settings = {
     ESP = true,
-    Aimbot = true,        -- 實體鎖頭
-    TriggerBot = false,   -- ⚡ 純扳機 (準心指到就開火，不拉滑鼠)
-    AutoFire_Hip = false, -- 盲射鎖頭+開火
-    AutoFire_ADS = false, -- 開鏡鎖頭+開火
+    Aimbot = true,       
+    TriggerBot = false,   
+    AutoFire_Hip = false, 
+    AutoFire_ADS = false,
     TeamCheck = true,  
     WallCheck = true,  
     Fly = false,       
@@ -154,7 +153,7 @@ local function AddAdjuster(name, settingKey, step, min, max)
     end)
 end
 
--- [[ 飛行系統控制 ]]
+
 local FlyBodyGyro, FlyBodyVelocity
 local CONTROL = {F = 0, B = 0, L = 0, R = 0, UP = 0, DOWN = 0}
 
@@ -189,7 +188,7 @@ local function UpdateFlyState(state)
     end
 end
 
--- UI 按鈕生成
+
 AddToggle("方框與血條 (ESP)", "ESP")
 AddToggle("實體滑鼠鎖頭 (右鍵瞄準)", "Aimbot") 
 AddToggle("純扳機 (指到敵人自動開火)", "TriggerBot") 
@@ -278,7 +277,7 @@ RunService.Stepped:Connect(function()
     end
 end)
 
--- [[ 5. 堅若磐石的 ESP 系統 (修復黑血條) ]]
+
 local function UpdateESP()
     for _, p in pairs(Players:GetPlayers()) do
         if p ~= LocalPlayer then
@@ -326,7 +325,7 @@ local function UpdateESP()
                             drawings.Box.Position = Vector2.new(centerPos.X - width/2, topPos.Y)
                             drawings.Box.Visible = true
                             
-                            -- ⚡ 嚴格血量數學計算，防止黑血條崩潰
+                            
                             local health = tonumber(p.Character.Humanoid.Health) or 0
                             local maxHealth = tonumber(p.Character.Humanoid.MaxHealth) or 100
                             if maxHealth <= 0 then maxHealth = 100 end
@@ -410,11 +409,11 @@ local function FindNewTarget()
     return target
 end
 
--- [[ 6. 核心引擎 (分離 Aimbot 與 TriggerBot) ]]
+
 _G.MUMU_PRO_CONNECTION = RunService.RenderStepped:Connect(function()
     UpdateESP()
 
-    -- 飛行引擎
+    
     if Settings.Fly and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
         local hrp = LocalPlayer.Character.HumanoidRootPart
         local gyro = hrp:FindFirstChild("MUMU_GYRO")
@@ -439,7 +438,7 @@ _G.MUMU_PRO_CONNECTION = RunService.RenderStepped:Connect(function()
 
     local isRightClicking = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
     
-    -- 只要開啟了任一戰鬥功能，就啟動偵測
+   
     if Settings.Aimbot or Settings.AutoFire_Hip or Settings.AutoFire_ADS or Settings.TriggerBot then
         
         if not LockedTarget then 
@@ -462,27 +461,27 @@ _G.MUMU_PRO_CONNECTION = RunService.RenderStepped:Connect(function()
                 local deltaY = screenPos.Y - screenCenter.Y
                 local distToCenter = math.sqrt(deltaX^2 + deltaY^2)
 
-                -- ⚡ 1. 鎖頭邏輯 (只有 Aimbot 開啟，且按住右鍵或開啟盲射鎖頭時才作動)
+              
                 if Settings.Aimbot and (isRightClicking or Settings.AutoFire_Hip) then
                     if mousemoverel then
                         mousemoverel(deltaX * Settings.AimbotSens, deltaY * Settings.AimbotSens)
                     end
                 end
 
-                -- ⚡ 2. 開火邏輯 (三種獨立模式)
+                
                 local shouldFire = false
                 
-                -- 模式 A: 開鏡鎖頭開火
+               
                 if Settings.AutoFire_ADS and isRightClicking then 
                     shouldFire = true 
                 end
                 
-                -- 模式 B: 盲射鎖頭開火
+                
                 if Settings.AutoFire_Hip and not isRightClicking then 
                     shouldFire = true 
                 end
                 
-                -- 模式 C: 純扳機 (TriggerBot) -> 準心距離敵人非常近時自動開火，不拉滑鼠
+                
                 if Settings.TriggerBot and distToCenter <= 40 then 
                     shouldFire = true 
                 end
