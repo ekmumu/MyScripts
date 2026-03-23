@@ -1,5 +1,5 @@
 -- ==========================================
--- MUMU RIVALS - 100%絕對秒鎖 + 雙模式開火 + 飛行常駐
+-- MUMU PRO - 滑鼠絕對瞬移鎖頭 + 開鏡/盲射自動開火
 -- ==========================================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -10,8 +10,8 @@ local LocalPlayer = Players.LocalPlayer
 local Settings = {
     ESP = true,
     Aimbot = true,
-    TriggerBot = false, -- ⚡ 鎖定後自動長按開火
-    RapidFire = false,  -- ⚡ 鎖定後連續點擊開火
+    AutoFire_Hip = false, -- ⚡ 不開鏡自動開火 (盲射)
+    AutoFire_ADS = false, -- ⚡ 開鏡(右鍵)時自動開火
     TeamCheck = true,  
     WallCheck = true,  
     Fly = false,       
@@ -20,7 +20,6 @@ local Settings = {
     Prediction = 0.12, 
     FOV = 250,         
     MaxDistance = 350
-    -- 移除了 Smoothness 和 AimbotSens，因為現在是 100% 強制秒鎖
 }
 
 local SafeGui = (gethui and gethui()) or game:GetService("CoreGui")
@@ -58,7 +57,6 @@ Container.CanvasSize = UDim2.new(0, 0, 1.8, 0)
 local Layout = Instance.new("UIListLayout", Container)
 Layout.Padding = UDim.new(0, 8)
 
--- [ 按鈕生成器 ]
 local function AddToggle(name, settingKey, customCallback)
     local btn = Instance.new("TextButton", Container)
     btn.Size = UDim2.new(1, -10, 0, 45)
@@ -77,7 +75,6 @@ local function AddToggle(name, settingKey, customCallback)
     end)
 end
 
--- [ 數值微調器 ]
 local function AddAdjuster(name, settingKey, step, min, max)
     local frame = Instance.new("Frame", Container)
     frame.Size = UDim2.new(1, -10, 0, 45)
@@ -137,7 +134,6 @@ local function AddAdjuster(name, settingKey, step, min, max)
     end)
 end
 
--- [[ 飛行系統控制 ]]
 local FlyBodyGyro, FlyBodyVelocity
 local CONTROL = {F = 0, B = 0, L = 0, R = 0, UP = 0, DOWN = 0}
 
@@ -168,11 +164,10 @@ local function UpdateFlyState(state)
     end
 end
 
--- ⚡ UI 生成 (更新了開火選項)
 AddToggle("方框與血條 (ESP)", "ESP")
-AddToggle("100% 絕對鎖頭 (Aimbot)", "Aimbot")
-AddToggle("鎖定後自動開火 (長按)", "TriggerBot") 
-AddToggle("鎖定後連續開火 (光速連點)", "RapidFire") 
+AddToggle("絕對鎖頭 (瞬移鎖死)", "Aimbot")
+AddToggle("鎖定後盲射 (不開鏡射擊)", "AutoFire_Hip") 
+AddToggle("開鏡時射擊 (右鍵射擊)", "AutoFire_ADS") 
 AddToggle("不瞄隊友 (Team)", "TeamCheck")
 AddToggle("隔牆不瞄 (Wall)", "WallCheck")
 AddToggle("飛行模式常駐 (Fly)", "Fly", UpdateFlyState) 
@@ -190,7 +185,6 @@ Hint.TextSize = 13
 Hint.Font = Enum.Font.Gotham
 Hint.BackgroundTransparency = 1
 
--- [[ 2. 按鍵監聽 ]]
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if not gameProcessed and input.KeyCode == Enum.KeyCode.J then Main.Visible = not Main.Visible end
     if not gameProcessed then
@@ -214,7 +208,6 @@ UserInputService.InputEnded:Connect(function(input, gameProcessed)
     elseif k == Enum.KeyCode.LeftControl then CONTROL.DOWN = 0 end
 end)
 
--- [[ 3. 過濾邏輯 ]]
 local function IsVisible(targetChar)
     if not Settings.WallCheck then return true end
     if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("Head") then return true end
@@ -235,7 +228,6 @@ local function IsTeammate(p)
     return false
 end
 
--- [[ 4. 穿牆系統 ]]
 RunService.Stepped:Connect(function()
     if Settings.Noclip and LocalPlayer.Character then
         for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
@@ -244,7 +236,6 @@ RunService.Stepped:Connect(function()
     end
 end)
 
--- [[ 5. ESP ]]
 local ESP_Drawings = {}
 local function UpdateESP()
     for _, p in pairs(Players:GetPlayers()) do
@@ -280,7 +271,6 @@ local function UpdateESP()
     end
 end
 
--- [[ 6. 核心：絕對秒鎖 + 雙模式開火 + 飛行 ]]
 local LockedTarget = nil 
 local isAutoFiring = false
 local lastRapidFire = 0
@@ -315,7 +305,6 @@ end
 RunService.RenderStepped:Connect(function()
     UpdateESP()
 
-    -- 飛行物理
     if Settings.Fly and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
         local hrp = LocalPlayer.Character.HumanoidRootPart
         local gyro = hrp:FindFirstChild("MUMU_GYRO")
@@ -331,8 +320,11 @@ RunService.RenderStepped:Connect(function()
         end
     end
 
-    -- ⚡ 100% 絕對鎖頭 + 開火邏輯
-    if Settings.Aimbot and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
+    -- ⚡ 判斷是否需要啟動瞄準
+    local isRightClicking = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
+    local shouldAimbot = (Settings.Aimbot and (isRightClicking or Settings.AutoFire_Hip))
+
+    if shouldAimbot then
         if not LockedTarget then LockedTarget = FindNewTarget() end
 
         if LockedTarget and LockedTarget:FindFirstChild("Head") and LockedTarget:FindFirstChild("Humanoid") and LockedTarget.Humanoid.Health > 0 then
@@ -342,26 +334,39 @@ RunService.RenderStepped:Connect(function()
                 return 
             end
 
-            -- 計算敵人頭部未來位置
             local headPos = LockedTarget.Head.Position + (LockedTarget.HumanoidRootPart.Velocity * Settings.Prediction)
+            local screenPos, onScreen = Camera:WorldToViewportPoint(headPos)
             
-            -- ⚡ 拔除推力與平滑，直接強制覆蓋攝影機視角，達到 100% 死鎖
-            Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, headPos)
+            if onScreen then
+                -- ⚡ 滑鼠絕對瞬移，騙過遊戲底層，讓槍管真正轉過去
+                if mousemoveabs then
+                    mousemoveabs(screenPos.X, screenPos.Y)
+                elseif mousemoverel then
+                    -- 備用方案，用極大推力逼過去
+                    local mousePos = UserInputService:GetMouseLocation()
+                    mousemoverel((screenPos.X - mousePos.X), (screenPos.Y - mousePos.Y))
+                end
 
-            -- 開火邏輯 (既然已經 100% 死鎖了，只要你設定有開，就一定會觸發開火)
-            if Settings.RapidFire then
-                -- 模式 1：光速連點 (每 0.05 秒點一次)
-                if tick() - lastRapidFire > 0.05 then
-                    SafePress()
-                    task.delay(0.02, function() SafeRelease() end)
-                    lastRapidFire = tick()
+                -- ⚡ 開火邏輯判斷
+                local shouldFire = false
+                if Settings.AutoFire_ADS and isRightClicking then
+                    shouldFire = true
+                elseif Settings.AutoFire_Hip and not isRightClicking then
+                    shouldFire = true
                 end
-            elseif Settings.TriggerBot then
-                -- 模式 2：自動長按
-                if not isAutoFiring then
-                    isAutoFiring = true
-                    SafePress() 
+
+                if shouldFire then
+                    if tick() - lastRapidFire > 0.05 then
+                        SafePress()
+                        task.delay(0.02, function() SafeRelease() end)
+                        lastRapidFire = tick()
+                    end
+                else
+                    if isAutoFiring then isAutoFiring = false SafeRelease() end
                 end
+            else 
+                LockedTarget = nil 
+                if isAutoFiring then isAutoFiring = false SafeRelease() end
             end
         else 
             LockedTarget = nil 
@@ -373,7 +378,6 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- 重生後自動續傳飛行狀態
 LocalPlayer.CharacterAdded:Connect(function(newChar)
     if isAutoFiring then isAutoFiring = false SafeRelease() end
     task.delay(0.5, function()
