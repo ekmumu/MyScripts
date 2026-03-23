@@ -1,5 +1,5 @@
 -- ==========================================
--- MUMU RIVALS - 物理滑鼠死鎖 + 飛行穿牆版
+-- MUMU RIVALS - 物理滑鼠死鎖 + 飛行穿牆 + 穩定ESP
 -- ==========================================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -12,8 +12,8 @@ local Settings = {
     Aimbot = true,
     TeamCheck = true,  
     WallCheck = true,  
-    Fly = false,       -- ⚡ 新增：飛行模式
-    Noclip = false,    -- ⚡ 新增：穿牆模式
+    Fly = false,       -- ⚡ 飛行模式
+    Noclip = false,    -- ⚡ 穿牆模式
     FlySpeed = 100,     -- ⚡ 飛行速度
     Prediction = 0.12, 
     FOV = 250,
@@ -32,7 +32,7 @@ ScreenGui.Name = "MUMU_PHYSICS_LOCK"
 ScreenGui.ResetOnSpawn = false
 
 local Main = Instance.new("Frame", ScreenGui)
-Main.Size = UDim2.fromOffset(300, 580) -- ⬆️ 拉高介面以容納新按鈕
+Main.Size = UDim2.fromOffset(300, 580) 
 Main.Position = UDim2.fromScale(0.5, 0.5) 
 Main.AnchorPoint = Vector2.new(0.5, 0.5)  
 Main.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
@@ -84,7 +84,7 @@ local function UpdateFlyState(state)
     local hrp = char.HumanoidRootPart
 
     if state then
-        -- 開啟飛行：創建反重力與推力元件
+        -- 開啟飛行
         FlyBodyGyro = Instance.new("BodyGyro", hrp)
         FlyBodyGyro.P = 9e4
         FlyBodyGyro.maxTorque = Vector3.new(9e9, 9e9, 9e9)
@@ -94,9 +94,9 @@ local function UpdateFlyState(state)
         FlyBodyVelocity.velocity = Vector3.new(0, 0, 0)
         FlyBodyVelocity.maxForce = Vector3.new(9e9, 9e9, 9e9)
 
-        char.Humanoid.PlatformStand = true -- 關閉跑步動畫，防止抖動
+        char.Humanoid.PlatformStand = true 
     else
-        -- 關閉飛行：刪除元件
+        -- 關閉飛行
         if FlyBodyGyro then FlyBodyGyro:Destroy() end
         if FlyBodyVelocity then FlyBodyVelocity:Destroy() end
         char.Humanoid.PlatformStand = false
@@ -107,8 +107,8 @@ AddToggle("方框透視 (Box)", "ESP")
 AddToggle("物理死鎖 (右鍵)", "Aimbot")
 AddToggle("不瞄隊友 (Team)", "TeamCheck")
 AddToggle("隔牆不瞄 (Wall)", "WallCheck")
-AddToggle("飛行模式 (Fly)", "Fly", UpdateFlyState) -- ⚡ 綁定飛行開關
-AddToggle("穿牆模式 (Noclip)", "Noclip")           -- ⚡ 穿牆開關
+AddToggle("飛行模式 (Fly)", "Fly", UpdateFlyState) 
+AddToggle("穿牆模式 (Noclip)", "Noclip")           
 
 local Hint = Instance.new("TextLabel", Main)
 Hint.Size = UDim2.new(1, 0, 0, 30)
@@ -119,7 +119,7 @@ Hint.TextSize = 14
 Hint.Font = Enum.Font.Gotham
 Hint.BackgroundTransparency = 1
 
--- [[ 2. 按鍵監聽 (包含 J鍵 與 飛行WASD) ]]
+-- [[ 2. 按鍵監聽 ]]
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if not gameProcessed and input.KeyCode == Enum.KeyCode.J then
         Main.Visible = not Main.Visible
@@ -177,7 +177,6 @@ local function IsTeammate(p)
 end
 
 -- [[ 4. 穿牆系統 (Stepped) ]]
--- ⚡ 穿牆必須放在 Stepped 裡面不斷覆寫，才能對抗 Roblox 原生的物理碰撞恢復
 RunService.Stepped:Connect(function()
     if Settings.Noclip and LocalPlayer.Character then
         for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
@@ -188,7 +187,7 @@ RunService.Stepped:Connect(function()
     end
 end)
 
--- [[ 5. 方框透視 ]]
+-- [[ 5. ⚡ 修復後絕對穩定的方框透視 (Box ESP) ]]
 local ESP_Boxes = {}
 local function UpdateESP()
     for _, p in pairs(Players:GetPlayers()) do
@@ -202,20 +201,25 @@ local function UpdateESP()
             end
 
             local box = ESP_Boxes[p]
-            if Settings.ESP and p.Character and p.Character:FindFirstChild("HumanoidRootPart") and p.Character:FindFirstChild("Head") and p.Character:FindFirstChild("Humanoid") and p.Character.Humanoid.Health > 0 then
+            if Settings.ESP and p.Character and p.Character:FindFirstChild("HumanoidRootPart") and p.Character:FindFirstChild("Humanoid") and p.Character.Humanoid.Health > 0 then
                 
                 if IsTeammate(p) then box.Visible = false continue end
                 
-                local dist = (Camera.CFrame.Position - p.Character.HumanoidRootPart.Position).Magnitude
+                local hrp = p.Character.HumanoidRootPart
+                local dist = (Camera.CFrame.Position - hrp.Position).Magnitude
+                
                 if dist < Settings.MaxDistance then
-                    local topPos, onScreen = Camera:WorldToViewportPoint(p.Character.Head.Position + Vector3.new(0, 0.5, 0))
-                    local bottomPos = Camera:WorldToViewportPoint(p.Character.HumanoidRootPart.Position - Vector3.new(0, 3.5, 0))
+                    -- ⚡ 關鍵修改：只使用 HRP (身體中心) 進行上下固定偏移，不再抓取會擺動的 Head
+                    local topPos, onScreen = Camera:WorldToViewportPoint(hrp.Position + Vector3.new(0, 2.5, 0))
+                    local bottomPos = Camera:WorldToViewportPoint(hrp.Position - Vector3.new(0, 3, 0))
+                    local centerPos = Camera:WorldToViewportPoint(hrp.Position)
 
                     if onScreen then
                         local height = math.abs(topPos.Y - bottomPos.Y)
                         local width = height * 0.6
                         box.Size = Vector2.new(width, height)
-                        box.Position = Vector2.new(topPos.X - width/2, topPos.Y)
+                        -- 以中心點對齊，確保框框不會隨動畫左右偏移
+                        box.Position = Vector2.new(centerPos.X - width/2, topPos.Y)
                         box.Visible = true
                     else box.Visible = false end
                 else box.Visible = false end
@@ -250,11 +254,11 @@ end
 RunService.RenderStepped:Connect(function()
     UpdateESP()
 
-    -- ⚡ 飛行物理更新 (依照視角方向移動)
+    -- 飛行物理更新
     if Settings.Fly and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
         if FlyBodyGyro and FlyBodyVelocity then
             local camCF = Camera.CFrame
-            FlyBodyGyro.cframe = camCF -- 身體跟著視角轉
+            FlyBodyGyro.cframe = camCF 
             
             local moveDir = Vector3.new(0, 0, 0)
             moveDir = moveDir + camCF.LookVector * (CONTROL.F + CONTROL.B)
@@ -311,7 +315,6 @@ end)
 LocalPlayer.CharacterAdded:Connect(function()
     if Settings.Fly then
         Settings.Fly = false
-        -- 觸發 UI 更新 (選單打開時手動點掉，或重開選單)
     end
 end)
 
