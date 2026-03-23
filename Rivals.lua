@@ -1,6 +1,4 @@
--- ==========================================
--- MUMU PRO (V30) - 獨立功能解綁 + 血條渲染修復 + 扳機範圍微調
--- ==========================================
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -8,7 +6,7 @@ local VirtualInputManager = game:GetService("VirtualInputManager")
 local Camera = workspace.CurrentCamera
 local LocalPlayer = Players.LocalPlayer
 
--- [[ 0. 核心防禦：全局清理系統 ]]
+
 if _G.MUMU_PRO_CONNECTION then 
     _G.MUMU_PRO_CONNECTION:Disconnect() 
 end
@@ -24,11 +22,11 @@ _G.MUMU_ESP_DRAWINGS = {}
 
 local Settings = {
     ESP = true,
-    Aimbot = true,        -- 純實體鎖頭 (不開火)
-    TriggerBot = false,   -- 純扳機 (不鎖頭，指到就開火)
-    TriggerRadius = 15,   -- ⚡ 新增：扳機判定範圍
-    AutoFire_ADS = false, -- 開鏡鎖頭 + 開火
-    AutoFire_Hip = false, -- 盲射鎖頭 + 開火
+    Aimbot = true,       
+    TriggerBot = false,   
+    TriggerRadius = 15,  
+    AutoFire_ADS = false, 
+    AutoFire_Hip = false, 
     TeamCheck = true,  
     WallCheck = true,  
     Fly = false,       
@@ -155,7 +153,7 @@ local function AddAdjuster(name, settingKey, step, min, max)
     end)
 end
 
--- [[ 飛行系統控制 ]]
+
 local FlyBodyGyro, FlyBodyVelocity
 local CONTROL = {F = 0, B = 0, L = 0, R = 0, UP = 0, DOWN = 0}
 
@@ -190,7 +188,7 @@ local function UpdateFlyState(state)
     end
 end
 
--- UI 按鈕生成
+
 AddToggle("方框與血條 (ESP)", "ESP")
 AddToggle("實體滑鼠鎖頭 (右鍵瞄準)", "Aimbot") 
 AddToggle("純扳機 (指到敵人自動開火)", "TriggerBot") 
@@ -202,7 +200,7 @@ AddToggle("飛行模式常駐 (Fly)", "Fly")
 AddToggle("穿牆模式 (Noclip)", "Noclip")           
 
 AddAdjuster("鎖頭推力 (太抖請調低)", "AimbotSens", 0.1, 0.1, 2.0)
-AddAdjuster("扳機判定範圍", "TriggerRadius", 5, 5, 100) -- ⚡ 新增扳機範圍調節
+AddAdjuster("扳機判定範圍", "TriggerRadius", 5, 5, 100) 
 AddAdjuster("飛行速度", "FlySpeed", 20, 20, 300)
 AddAdjuster("FOV 鎖定範圍", "FOV", 25, 50, 800)
 
@@ -280,12 +278,12 @@ RunService.Stepped:Connect(function()
     end
 end)
 
--- [[ 5. 堅若磐石的 ESP 系統 (血條渲染徹底改寫) ]]
+
 local function UpdateESP()
     for _, p in pairs(Players:GetPlayers()) do
         if p ~= LocalPlayer then
             if not _G.MUMU_ESP_DRAWINGS[p] then
-                -- ⚡ 把血條改成 Line (線條)，絕對不會再有矩形破圖問題
+               
                 _G.MUMU_ESP_DRAWINGS[p] = { 
                     Box = Drawing.new("Square"), 
                     HealthBg = Drawing.new("Line"), 
@@ -327,7 +325,7 @@ local function UpdateESP()
                             drawings.Box.Position = Vector2.new(centerPos.X - width/2, topPos.Y)
                             drawings.Box.Visible = true
                             
-                            -- 嚴格血量計算
+                            
                             local health = tonumber(p.Character.Humanoid.Health) or 0
                             local maxHealth = tonumber(p.Character.Humanoid.MaxHealth) or 100
                             if maxHealth <= 0 then maxHealth = 100 end
@@ -335,7 +333,7 @@ local function UpdateESP()
                             local healthPercent = math.clamp(health / maxHealth, 0, 1)
                             if healthPercent ~= healthPercent then healthPercent = 1 end
                             
-                            -- ⚡ 使用 Line (由下往上畫)，完美防破圖
+                           
                             local barX = centerPos.X - width/2 - 6
                             
                             drawings.HealthBg.From = Vector2.new(barX, bottomPos.Y)
@@ -406,11 +404,11 @@ local function FindNewTarget()
     return target
 end
 
--- [[ 6. 核心引擎 (完美解綁 Aimbot 與 AutoFire) ]]
+
 _G.MUMU_PRO_CONNECTION = RunService.RenderStepped:Connect(function()
     UpdateESP()
 
-    -- 飛行引擎
+    
     if Settings.Fly and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
         local hrp = LocalPlayer.Character.HumanoidRootPart
         local gyro = hrp:FindFirstChild("MUMU_GYRO"); local vel = hrp:FindFirstChild("MUMU_VELOCITY")
@@ -427,7 +425,7 @@ _G.MUMU_PRO_CONNECTION = RunService.RenderStepped:Connect(function()
 
     local isRightClicking = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
     
-    -- 只要開啟了任一戰鬥功能，就啟動尋敵
+    
     if Settings.Aimbot or Settings.AutoFire_Hip or Settings.AutoFire_ADS or Settings.TriggerBot then
         
         if not LockedTarget then LockedTarget = FindNewTarget() end
@@ -448,26 +446,26 @@ _G.MUMU_PRO_CONNECTION = RunService.RenderStepped:Connect(function()
                 local deltaY = screenPos.Y - screenCenter.Y
                 local distToCenter = math.sqrt(deltaX^2 + deltaY^2)
 
-                -- ⚡ 判斷是否需要「移動滑鼠 (鎖頭)」
+               
                 local shouldAim = false
                 if Settings.Aimbot and isRightClicking then shouldAim = true end
                 if Settings.AutoFire_ADS and isRightClicking then shouldAim = true end
-                if Settings.AutoFire_Hip then shouldAim = true end -- 不開鏡暴力模式，隨時都在鎖
+                if Settings.AutoFire_Hip then shouldAim = true end 
 
-                -- 執行鎖頭推動
+                
                 if shouldAim then
                     if mousemoverel then
                         mousemoverel(deltaX * Settings.AimbotSens, deltaY * Settings.AimbotSens)
                     end
                 end
 
-                -- ⚡ 判斷是否需要「開火」
+                
                 local shouldFire = false
                 if Settings.AutoFire_ADS and isRightClicking then shouldFire = true end
                 if Settings.AutoFire_Hip then shouldFire = true end
                 if Settings.TriggerBot and distToCenter <= Settings.TriggerRadius then shouldFire = true end
 
-                -- 執行開火
+                
                 if shouldFire then
                     if tick() - lastRapidFire > 0.05 then
                         FireWeapon()
