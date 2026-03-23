@@ -43,7 +43,7 @@ Instance.new("UIStroke", Main).Color = Color3.fromRGB(255, 0, 0)
 
 local Title = Instance.new("TextLabel", Main)
 Title.Size = UDim2.new(1, 0, 0, 60)
-Title.Text = "⚡ MUMU CORE"
+Title.Text = "⚡ MUMU PRO"
 Title.TextSize = 28
 Title.Font = Enum.Font.GothamBlack
 Title.TextColor3 = Color3.new(1, 1, 1)
