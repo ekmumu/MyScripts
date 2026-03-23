@@ -1,5 +1,5 @@
 -- ==========================================
--- MUMU RIVALS - 物理硬鎖 + 飛行常駐 + 破壞死區 + 真實開火
+-- MUMU RIVALS - 100%絕對秒鎖 + 雙模式開火 + 飛行常駐
 -- ==========================================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -10,18 +10,17 @@ local LocalPlayer = Players.LocalPlayer
 local Settings = {
     ESP = true,
     Aimbot = true,
-    AutoFire = false,  
+    TriggerBot = false, -- ⚡ 鎖定後自動長按開火
+    RapidFire = false,  -- ⚡ 鎖定後連續點擊開火
     TeamCheck = true,  
     WallCheck = true,  
     Fly = false,       
     Noclip = false,    
-    AntiKill = false,  -- ⚡ 新增：破壞場外死亡磚塊
     FlySpeed = 100,    
     Prediction = 0.12, 
     FOV = 250,         
-    MaxDistance = 350,
-    Smoothness = 1,    
-    AimbotSens = 1.5   
+    MaxDistance = 350
+    -- 移除了 Smoothness 和 AimbotSens，因為現在是 100% 強制秒鎖
 }
 
 local SafeGui = (gethui and gethui()) or game:GetService("CoreGui")
@@ -34,7 +33,7 @@ ScreenGui.Name = "MUMU_PHYSICS_LOCK"
 ScreenGui.ResetOnSpawn = false
 
 local Main = Instance.new("Frame", ScreenGui)
-Main.Size = UDim2.fromOffset(320, 620) 
+Main.Size = UDim2.fromOffset(320, 580) 
 Main.Position = UDim2.fromScale(0.5, 0.5) 
 Main.AnchorPoint = Vector2.new(0.5, 0.5)  
 Main.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
@@ -55,7 +54,7 @@ Container.Size = UDim2.new(0.9, 0, 1, -100)
 Container.Position = UDim2.fromScale(0.05, 0.12)
 Container.BackgroundTransparency = 1
 Container.ScrollBarThickness = 2
-Container.CanvasSize = UDim2.new(0, 0, 2, 0) 
+Container.CanvasSize = UDim2.new(0, 0, 1.8, 0) 
 local Layout = Instance.new("UIListLayout", Container)
 Layout.Padding = UDim.new(0, 8)
 
@@ -169,33 +168,18 @@ local function UpdateFlyState(state)
     end
 end
 
--- ⚡ 破壞死區函數 (Anti-KillBrick)
-local function DestroyKillBricks(state)
-    if state then
-        for _, v in pairs(workspace:GetDescendants()) do
-            -- 如果這是一個碰觸觸發器，且父零件是隱形的，拔掉它防暴斃
-            if v:IsA("TouchTransmitter") and v.Parent and v.Parent:IsA("BasePart") then
-                if v.Parent.Transparency == 1 or v.Parent.Name:lower():match("kill") then
-                    v:Destroy()
-                end
-            end
-        end
-    end
-end
-
--- ⚡ UI 生成
+-- ⚡ UI 生成 (更新了開火選項)
 AddToggle("方框與血條 (ESP)", "ESP")
-AddToggle("物理硬鎖 (右鍵)", "Aimbot")
-AddToggle("自動開火 (真實點擊)", "AutoFire") 
+AddToggle("100% 絕對鎖頭 (Aimbot)", "Aimbot")
+AddToggle("鎖定後自動開火 (長按)", "TriggerBot") 
+AddToggle("鎖定後連續開火 (光速連點)", "RapidFire") 
 AddToggle("不瞄隊友 (Team)", "TeamCheck")
 AddToggle("隔牆不瞄 (Wall)", "WallCheck")
 AddToggle("飛行模式常駐 (Fly)", "Fly", UpdateFlyState) 
 AddToggle("穿牆模式 (Noclip)", "Noclip")           
-AddToggle("破壞場外死區 (Anti-Kill)", "AntiKill", DestroyKillBricks) -- ⚡ 點下去就幫你拔除空氣牆死亡判定
 
 AddAdjuster("飛行速度", "FlySpeed", 20, 20, 300)
-AddAdjuster("鎖頭推力", "AimbotSens", 0.5, 0.5, 5.0)
-AddAdjuster("FOV 範圍", "FOV", 25, 50, 800)
+AddAdjuster("FOV 鎖定範圍", "FOV", 25, 50, 800)
 
 local Hint = Instance.new("TextLabel", Main)
 Hint.Size = UDim2.new(1, 0, 0, 25)
@@ -208,9 +192,7 @@ Hint.BackgroundTransparency = 1
 
 -- [[ 2. 按鍵監聽 ]]
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if not gameProcessed and input.KeyCode == Enum.KeyCode.J then
-        Main.Visible = not Main.Visible
-    end
+    if not gameProcessed and input.KeyCode == Enum.KeyCode.J then Main.Visible = not Main.Visible end
     if not gameProcessed then
         local k = input.KeyCode
         if k == Enum.KeyCode.W then CONTROL.F = 1
@@ -298,11 +280,11 @@ local function UpdateESP()
     end
 end
 
--- [[ 6. 核心：物理模擬 + 安全開火 + 飛行 ]]
+-- [[ 6. 核心：絕對秒鎖 + 雙模式開火 + 飛行 ]]
 local LockedTarget = nil 
 local isAutoFiring = false
+local lastRapidFire = 0
 
--- ⚡ 安全保護的滑鼠點擊函數
 local function SafePress()
     if mouse1press then pcall(function() mouse1press() end) end
 end
@@ -333,11 +315,11 @@ end
 RunService.RenderStepped:Connect(function()
     UpdateESP()
 
+    -- 飛行物理
     if Settings.Fly and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
         local hrp = LocalPlayer.Character.HumanoidRootPart
         local gyro = hrp:FindFirstChild("MUMU_GYRO")
         local vel = hrp:FindFirstChild("MUMU_VELOCITY")
-        
         if gyro and vel then
             local camCF = Camera.CFrame
             gyro.cframe = camCF 
@@ -349,6 +331,7 @@ RunService.RenderStepped:Connect(function()
         end
     end
 
+    -- ⚡ 100% 絕對鎖頭 + 開火邏輯
     if Settings.Aimbot and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
         if not LockedTarget then LockedTarget = FindNewTarget() end
 
@@ -359,38 +342,26 @@ RunService.RenderStepped:Connect(function()
                 return 
             end
 
+            -- 計算敵人頭部未來位置
             local headPos = LockedTarget.Head.Position + (LockedTarget.HumanoidRootPart.Velocity * Settings.Prediction)
-            local screenPos, onScreen = Camera:WorldToViewportPoint(headPos)
             
-            if onScreen then
-                local mousePos = UserInputService:GetMouseLocation()
-                
-                -- ⚡ 真實模擬點擊
-                if Settings.AutoFire then
-                    local dist = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
-                    if dist < 45 then 
-                        if not isAutoFiring then
-                            isAutoFiring = true
-                            SafePress() 
-                        end
-                    else
-                        if isAutoFiring then
-                            isAutoFiring = false
-                            SafeRelease() 
-                        end
-                    end
-                end
+            -- ⚡ 拔除推力與平滑，直接強制覆蓋攝影機視角，達到 100% 死鎖
+            Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, headPos)
 
-                if mousemoverel then
-                    local moveX = (screenPos.X - mousePos.X) * Settings.Smoothness * Settings.AimbotSens
-                    local moveY = (screenPos.Y - mousePos.Y) * Settings.Smoothness * Settings.AimbotSens
-                    mousemoverel(moveX, moveY)
-                else
-                    Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, headPos)
+            -- 開火邏輯 (既然已經 100% 死鎖了，只要你設定有開，就一定會觸發開火)
+            if Settings.RapidFire then
+                -- 模式 1：光速連點 (每 0.05 秒點一次)
+                if tick() - lastRapidFire > 0.05 then
+                    SafePress()
+                    task.delay(0.02, function() SafeRelease() end)
+                    lastRapidFire = tick()
                 end
-            else 
-                LockedTarget = nil 
-                if isAutoFiring then isAutoFiring = false SafeRelease() end
+            elseif Settings.TriggerBot then
+                -- 模式 2：自動長按
+                if not isAutoFiring then
+                    isAutoFiring = true
+                    SafePress() 
+                end
             end
         else 
             LockedTarget = nil 
@@ -402,17 +373,12 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- ⚡ 重生後自動續傳飛行狀態
+-- 重生後自動續傳飛行狀態
 LocalPlayer.CharacterAdded:Connect(function(newChar)
     if isAutoFiring then isAutoFiring = false SafeRelease() end
-    
-    -- 等待身體載入後，如果飛行開關是開的，就幫你重新掛上飛行引擎
     task.delay(0.5, function()
         if Settings.Fly and newChar:FindFirstChild("HumanoidRootPart") then
             UpdateFlyState(true)
-        end
-        if Settings.AntiKill then
-            DestroyKillBricks(true)
         end
     end)
 end)
