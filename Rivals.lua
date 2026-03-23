@@ -1,5 +1,5 @@
 -- ==========================================
--- MUMU PRO (V26) - 全局防崩潰清理 + 絕對視角同步 + 雙模式真實開火
+-- MUMU PRO - 穩定核心 + 實體滑鼠推動 (槍鏡絕對同步)
 -- ==========================================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -29,7 +29,8 @@ local Settings = {
     FlySpeed = 100,    
     Prediction = 0.12, 
     FOV = 250,         
-    MaxDistance = 350
+    MaxDistance = 350,
+    AimbotSens = 0.5   -- ⚡ 新增：鎖頭推力（用來適應你的遊戲靈敏度）
 }
 
 -- [[ 1. UI 介面建立 ]]
@@ -43,7 +44,7 @@ ScreenGui.Name = "MUMU_PHYSICS_LOCK"
 ScreenGui.ResetOnSpawn = false
 
 local Main = Instance.new("Frame", ScreenGui)
-Main.Size = UDim2.fromOffset(320, 580) 
+Main.Size = UDim2.fromOffset(320, 620) -- 稍微加高一點放新按鈕
 Main.Position = UDim2.fromScale(0.5, 0.5) 
 Main.AnchorPoint = Vector2.new(0.5, 0.5)  
 Main.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
@@ -64,7 +65,7 @@ Container.Size = UDim2.new(0.9, 0, 1, -100)
 Container.Position = UDim2.fromScale(0.05, 0.12)
 Container.BackgroundTransparency = 1
 Container.ScrollBarThickness = 2
-Container.CanvasSize = UDim2.new(0, 0, 1.8, 0) 
+Container.CanvasSize = UDim2.new(0, 0, 2, 0) 
 local Layout = Instance.new("UIListLayout", Container)
 Layout.Padding = UDim.new(0, 8)
 
@@ -151,6 +152,7 @@ local function UpdateFlyState(state)
     local char = LocalPlayer.Character
     if not char or not char:FindFirstChild("HumanoidRootPart") or not char:FindFirstChild("Humanoid") then return end
     local hrp = char.HumanoidRootPart
+
     if state then
         if not hrp:FindFirstChild("MUMU_GYRO") then
             FlyBodyGyro = Instance.new("BodyGyro", hrp); FlyBodyGyro.Name = "MUMU_GYRO"; FlyBodyGyro.P = 9e4; FlyBodyGyro.maxTorque = Vector3.new(9e9, 9e9, 9e9); FlyBodyGyro.cframe = hrp.CFrame
@@ -167,7 +169,7 @@ local function UpdateFlyState(state)
 end
 
 AddToggle("方框與血條 (ESP)", "ESP")
-AddToggle("絕對鎖頭 (100% 視角)", "Aimbot")
+AddToggle("實體滑鼠鎖頭 (槍鏡同步)", "Aimbot") -- ⚡ 更名
 AddToggle("鎖定後盲射 (不開鏡射擊)", "AutoFire_Hip") 
 AddToggle("開鏡時射擊 (右鍵射擊)", "AutoFire_ADS") 
 AddToggle("不瞄隊友 (Team)", "TeamCheck")
@@ -175,6 +177,7 @@ AddToggle("隔牆不瞄 (Wall)", "WallCheck")
 AddToggle("飛行模式常駐 (Fly)", "Fly", UpdateFlyState) 
 AddToggle("穿牆模式 (Noclip)", "Noclip")           
 
+AddAdjuster("鎖頭推力 (太抖請調低)", "AimbotSens", 0.1, 0.1, 2.0) -- ⚡ 新增：靈敏度調節
 AddAdjuster("飛行速度", "FlySpeed", 20, 20, 300)
 AddAdjuster("FOV 鎖定範圍", "FOV", 25, 50, 800)
 
@@ -237,7 +240,6 @@ local function UpdateESP()
             end
 
             local drawings = _G.MUMU_ESP_DRAWINGS[p]
-            -- ⚡ 增加 pcall 防止任何因為人物死掉產生的報錯
             local success, _ = pcall(function()
                 if Settings.ESP and p.Character and p.Character:FindFirstChild("HumanoidRootPart") and p.Character:FindFirstChild("Humanoid") and p.Character.Humanoid.Health > 0 then
                     if IsTeammate(p) then drawings.Box.Visible = false; drawings.HealthBg.Visible = false; drawings.HealthBar.Visible = false return end
@@ -255,7 +257,7 @@ local function UpdateESP()
                             drawings.Box.Size = Vector2.new(width, height); drawings.Box.Position = Vector2.new(centerPos.X - width/2, topPos.Y); drawings.Box.Visible = true
                             
                             local health = p.Character.Humanoid.Health; 
-                            local maxHealth = math.max(p.Character.Humanoid.MaxHealth, 1) -- ⚡ 防治 0 血量崩潰
+                            local maxHealth = math.max(p.Character.Humanoid.MaxHealth, 1) 
                             local healthPercent = math.clamp(health / maxHealth, 0, 1)
                             
                             drawings.HealthBg.Size = Vector2.new(4, height); drawings.HealthBg.Position = Vector2.new(centerPos.X - width/2 - 6, topPos.Y); drawings.HealthBg.Visible = true
@@ -273,7 +275,7 @@ end
 local LockedTarget = nil 
 local lastRapidFire = 0
 
--- ⚡ 終極光速連點 (徹底解決有鎖定卻不開火的問題)
+-- ⚡ 螢幕中心點真實開火
 local function FireWeapon()
     if mouse1click then 
         pcall(function() mouse1click() end) 
@@ -289,15 +291,17 @@ end
 
 local function FindNewTarget()
     local target, maxDist = nil, Settings.FOV
-    local mousePos = UserInputService:GetMouseLocation()
+    -- ⚡ 改為從螢幕正中央計算距離 (確保準心附近的敵人優先鎖定)
+    local screenCenter = Camera.ViewportSize / 2 
     for _, p in pairs(Players:GetPlayers()) do
         if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") and p.Character:FindFirstChild("Humanoid") and p.Character.Humanoid.Health > 0 then
             if IsTeammate(p) then continue end
             if (Camera.CFrame.Position - p.Character.HumanoidRootPart.Position).Magnitude > Settings.MaxDistance then continue end
             if not IsVisible(p.Character) then continue end
+
             local pos, onScreen = Camera:WorldToViewportPoint(p.Character.Head.Position)
             if onScreen then
-                local dist = (Vector2.new(pos.X, pos.Y) - mousePos).Magnitude
+                local dist = (Vector2.new(pos.X, pos.Y) - screenCenter).Magnitude
                 if dist < maxDist then maxDist = dist target = p.Character end
             end
         end
@@ -338,21 +342,24 @@ _G.MUMU_PRO_CONNECTION = RunService.RenderStepped:Connect(function()
             local screenPos, onScreen = Camera:WorldToViewportPoint(headPos)
             
             if onScreen then
-                -- ⚡ 1. 視角絕對鎖死 (保證螢幕中央對準頭部)
-                Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, headPos)
+                -- ⚡ 終極槍管同步核心：螢幕中心追蹤法 (Delta Sync)
+                local screenCenter = Camera.ViewportSize / 2
+                
+                -- 計算敵人頭部與你目前準心（螢幕正中央）的像素距離
+                local deltaX = screenPos.X - screenCenter.X
+                local deltaY = screenPos.Y - screenCenter.Y
 
-                -- ⚡ 2. 引擎欺騙：強制觸發滑鼠位移信號，讓槍管同步轉過來
+                -- 真正推動你的實體滑鼠，這樣遊戲裡的槍管和狙擊鏡才會乖乖跟著轉
                 if mousemoverel then
-                    mousemoverel(1, 0); mousemoverel(-1, 0)
+                    mousemoverel(deltaX * Settings.AimbotSens, deltaY * Settings.AimbotSens)
                 end
 
-                -- ⚡ 3. 判斷開火 (邏輯最簡化，有對準就扣板機)
+                -- ⚡ 判斷是否需要開火
                 local shouldFire = false
                 if Settings.AutoFire_ADS and isRightClicking then shouldFire = true
                 elseif Settings.AutoFire_Hip and not isRightClicking then shouldFire = true end
 
                 if shouldFire then
-                    -- 限制最高射速 (0.05秒點一次，手槍/步槍皆適用)
                     if tick() - lastRapidFire > 0.05 then
                         FireWeapon()
                         lastRapidFire = tick()
