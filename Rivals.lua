@@ -1,8 +1,9 @@
-
+-- ==========================================
+-- MUMU RIVALS - 物理硬鎖 + 飛行常駐 + 破壞死區 + 真實開火
+-- ==========================================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
-local VirtualInputManager = game:GetService("VirtualInputManager") 
 local Camera = workspace.CurrentCamera
 local LocalPlayer = Players.LocalPlayer
 
@@ -14,6 +15,7 @@ local Settings = {
     WallCheck = true,  
     Fly = false,       
     Noclip = false,    
+    AntiKill = false,  -- ⚡ 新增：破壞場外死亡磚塊
     FlySpeed = 100,    
     Prediction = 0.12, 
     FOV = 250,         
@@ -21,7 +23,6 @@ local Settings = {
     Smoothness = 1,    
     AimbotSens = 1.5   
 }
-
 
 local SafeGui = (gethui and gethui()) or game:GetService("CoreGui")
 if SafeGui:FindFirstChild("MUMU_PHYSICS_LOCK") then
@@ -33,7 +34,7 @@ ScreenGui.Name = "MUMU_PHYSICS_LOCK"
 ScreenGui.ResetOnSpawn = false
 
 local Main = Instance.new("Frame", ScreenGui)
-Main.Size = UDim2.fromOffset(320, 580) 
+Main.Size = UDim2.fromOffset(320, 620) 
 Main.Position = UDim2.fromScale(0.5, 0.5) 
 Main.AnchorPoint = Vector2.new(0.5, 0.5)  
 Main.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
@@ -43,23 +44,22 @@ Instance.new("UIStroke", Main).Color = Color3.fromRGB(255, 0, 0)
 
 local Title = Instance.new("TextLabel", Main)
 Title.Size = UDim2.new(1, 0, 0, 60)
-Title.Text = "⚡ MUMU PRO"
+Title.Text = "⚡ MUMU CORE"
 Title.TextSize = 28
 Title.Font = Enum.Font.GothamBlack
 Title.TextColor3 = Color3.new(1, 1, 1)
 Title.BackgroundTransparency = 1
-
 
 local Container = Instance.new("ScrollingFrame", Main)
 Container.Size = UDim2.new(0.9, 0, 1, -100)
 Container.Position = UDim2.fromScale(0.05, 0.12)
 Container.BackgroundTransparency = 1
 Container.ScrollBarThickness = 2
-Container.CanvasSize = UDim2.new(0, 0, 1.8, 0) 
+Container.CanvasSize = UDim2.new(0, 0, 2, 0) 
 local Layout = Instance.new("UIListLayout", Container)
 Layout.Padding = UDim.new(0, 8)
 
-
+-- [ 按鈕生成器 ]
 local function AddToggle(name, settingKey, customCallback)
     local btn = Instance.new("TextButton", Container)
     btn.Size = UDim2.new(1, -10, 0, 45)
@@ -78,7 +78,7 @@ local function AddToggle(name, settingKey, customCallback)
     end)
 end
 
-
+-- [ 數值微調器 ]
 local function AddAdjuster(name, settingKey, step, min, max)
     local frame = Instance.new("Frame", Container)
     frame.Size = UDim2.new(1, -10, 0, 45)
@@ -130,7 +130,6 @@ local function AddAdjuster(name, settingKey, step, min, max)
             valText.Text = tostring(Settings[settingKey])
         end
     end)
-
     btnPlus.MouseButton1Click:Connect(function()
         if Settings[settingKey] + step <= max then
             Settings[settingKey] = Settings[settingKey] + step
@@ -139,7 +138,7 @@ local function AddAdjuster(name, settingKey, step, min, max)
     end)
 end
 
-
+-- [[ 飛行系統控制 ]]
 local FlyBodyGyro, FlyBodyVelocity
 local CONTROL = {F = 0, B = 0, L = 0, R = 0, UP = 0, DOWN = 0}
 
@@ -149,32 +148,50 @@ local function UpdateFlyState(state)
     local hrp = char.HumanoidRootPart
 
     if state then
-        FlyBodyGyro = Instance.new("BodyGyro", hrp)
-        FlyBodyGyro.P = 9e4
-        FlyBodyGyro.maxTorque = Vector3.new(9e9, 9e9, 9e9)
-        FlyBodyGyro.cframe = hrp.CFrame
-
-        FlyBodyVelocity = Instance.new("BodyVelocity", hrp)
-        FlyBodyVelocity.velocity = Vector3.new(0, 0, 0)
-        FlyBodyVelocity.maxForce = Vector3.new(9e9, 9e9, 9e9)
-
+        if not hrp:FindFirstChild("MUMU_GYRO") then
+            FlyBodyGyro = Instance.new("BodyGyro", hrp)
+            FlyBodyGyro.Name = "MUMU_GYRO"
+            FlyBodyGyro.P = 9e4
+            FlyBodyGyro.maxTorque = Vector3.new(9e9, 9e9, 9e9)
+            FlyBodyGyro.cframe = hrp.CFrame
+        end
+        if not hrp:FindFirstChild("MUMU_VELOCITY") then
+            FlyBodyVelocity = Instance.new("BodyVelocity", hrp)
+            FlyBodyVelocity.Name = "MUMU_VELOCITY"
+            FlyBodyVelocity.velocity = Vector3.new(0, 0, 0)
+            FlyBodyVelocity.maxForce = Vector3.new(9e9, 9e9, 9e9)
+        end
         char.Humanoid.PlatformStand = true 
     else
-        if FlyBodyGyro then FlyBodyGyro:Destroy() end
-        if FlyBodyVelocity then FlyBodyVelocity:Destroy() end
+        if hrp:FindFirstChild("MUMU_GYRO") then hrp.MUMU_GYRO:Destroy() end
+        if hrp:FindFirstChild("MUMU_VELOCITY") then hrp.MUMU_VELOCITY:Destroy() end
         char.Humanoid.PlatformStand = false
     end
 end
 
+-- ⚡ 破壞死區函數 (Anti-KillBrick)
+local function DestroyKillBricks(state)
+    if state then
+        for _, v in pairs(workspace:GetDescendants()) do
+            -- 如果這是一個碰觸觸發器，且父零件是隱形的，拔掉它防暴斃
+            if v:IsA("TouchTransmitter") and v.Parent and v.Parent:IsA("BasePart") then
+                if v.Parent.Transparency == 1 or v.Parent.Name:lower():match("kill") then
+                    v:Destroy()
+                end
+            end
+        end
+    end
+end
 
+-- ⚡ UI 生成
 AddToggle("方框與血條 (ESP)", "ESP")
 AddToggle("物理硬鎖 (右鍵)", "Aimbot")
-AddToggle("自動開火 (鎖定時)", "AutoFire")
+AddToggle("自動開火 (真實點擊)", "AutoFire") 
 AddToggle("不瞄隊友 (Team)", "TeamCheck")
 AddToggle("隔牆不瞄 (Wall)", "WallCheck")
-AddToggle("飛行模式 (Fly)", "Fly", UpdateFlyState) 
+AddToggle("飛行模式常駐 (Fly)", "Fly", UpdateFlyState) 
 AddToggle("穿牆模式 (Noclip)", "Noclip")           
-
+AddToggle("破壞場外死區 (Anti-Kill)", "AntiKill", DestroyKillBricks) -- ⚡ 點下去就幫你拔除空氣牆死亡判定
 
 AddAdjuster("飛行速度", "FlySpeed", 20, 20, 300)
 AddAdjuster("鎖頭推力", "AimbotSens", 0.5, 0.5, 5.0)
@@ -183,13 +200,13 @@ AddAdjuster("FOV 範圍", "FOV", 25, 50, 800)
 local Hint = Instance.new("TextLabel", Main)
 Hint.Size = UDim2.new(1, 0, 0, 25)
 Hint.Position = UDim2.new(0, 0, 1, -25)
-Hint.Text = "按 [J] 顯示/隱藏 | 飛行: WASD/空白/Ctrl"
+Hint.Text = "按 [J] 顯示/隱藏面板"
 Hint.TextColor3 = Color3.fromRGB(150, 150, 150)
 Hint.TextSize = 13
 Hint.Font = Enum.Font.Gotham
 Hint.BackgroundTransparency = 1
 
-
+-- [[ 2. 按鍵監聽 ]]
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if not gameProcessed and input.KeyCode == Enum.KeyCode.J then
         Main.Visible = not Main.Visible
@@ -215,7 +232,7 @@ UserInputService.InputEnded:Connect(function(input, gameProcessed)
     elseif k == Enum.KeyCode.LeftControl then CONTROL.DOWN = 0 end
 end)
 
-
+-- [[ 3. 過濾邏輯 ]]
 local function IsVisible(targetChar)
     if not Settings.WallCheck then return true end
     if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("Head") then return true end
@@ -236,7 +253,7 @@ local function IsTeammate(p)
     return false
 end
 
-
+-- [[ 4. 穿牆系統 ]]
 RunService.Stepped:Connect(function()
     if Settings.Noclip and LocalPlayer.Character then
         for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
@@ -245,7 +262,7 @@ RunService.Stepped:Connect(function()
     end
 end)
 
-
+-- [[ 5. ESP ]]
 local ESP_Drawings = {}
 local function UpdateESP()
     for _, p in pairs(Players:GetPlayers()) do
@@ -281,9 +298,18 @@ local function UpdateESP()
     end
 end
 
-
+-- [[ 6. 核心：物理模擬 + 安全開火 + 飛行 ]]
 local LockedTarget = nil 
 local isAutoFiring = false
+
+-- ⚡ 安全保護的滑鼠點擊函數
+local function SafePress()
+    if mouse1press then pcall(function() mouse1press() end) end
+end
+
+local function SafeRelease()
+    if mouse1release then pcall(function() mouse1release() end) end
+end
 
 local function FindNewTarget()
     local target, maxDist = nil, Settings.FOV
@@ -307,30 +333,29 @@ end
 RunService.RenderStepped:Connect(function()
     UpdateESP()
 
-    
     if Settings.Fly and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-        if FlyBodyGyro and FlyBodyVelocity then
+        local hrp = LocalPlayer.Character.HumanoidRootPart
+        local gyro = hrp:FindFirstChild("MUMU_GYRO")
+        local vel = hrp:FindFirstChild("MUMU_VELOCITY")
+        
+        if gyro and vel then
             local camCF = Camera.CFrame
-            FlyBodyGyro.cframe = camCF 
+            gyro.cframe = camCF 
             local moveDir = Vector3.new(0, 0, 0)
             moveDir = moveDir + camCF.LookVector * (CONTROL.F + CONTROL.B)
             moveDir = moveDir + camCF.RightVector * (CONTROL.L + CONTROL.R)
             moveDir = moveDir + camCF.UpVector * (CONTROL.UP + CONTROL.DOWN)
-            if moveDir.Magnitude > 0 then FlyBodyVelocity.velocity = moveDir.Unit * Settings.FlySpeed else FlyBodyVelocity.velocity = Vector3.new(0, 0, 0) end
+            if moveDir.Magnitude > 0 then vel.velocity = moveDir.Unit * Settings.FlySpeed else vel.velocity = Vector3.new(0, 0, 0) end
         end
     end
 
-   
     if Settings.Aimbot and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
         if not LockedTarget then LockedTarget = FindNewTarget() end
 
         if LockedTarget and LockedTarget:FindFirstChild("Head") and LockedTarget:FindFirstChild("Humanoid") and LockedTarget.Humanoid.Health > 0 then
             if (Camera.CFrame.Position - LockedTarget.HumanoidRootPart.Position).Magnitude > Settings.MaxDistance or not IsVisible(LockedTarget) then 
                 LockedTarget = nil 
-                if isAutoFiring then 
-                    isAutoFiring = false 
-                    task.spawn(function() VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1) end)
-                end
+                if isAutoFiring then isAutoFiring = false SafeRelease() end
                 return 
             end
 
@@ -340,19 +365,18 @@ RunService.RenderStepped:Connect(function()
             if onScreen then
                 local mousePos = UserInputService:GetMouseLocation()
                 
-              
+                -- ⚡ 真實模擬點擊
                 if Settings.AutoFire then
                     local dist = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
                     if dist < 45 then 
                         if not isAutoFiring then
                             isAutoFiring = true
-                            
-                            task.spawn(function() VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 1) end)
+                            SafePress() 
                         end
                     else
                         if isAutoFiring then
                             isAutoFiring = false
-                            task.spawn(function() VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1) end)
+                            SafeRelease() 
                         end
                     end
                 end
@@ -366,33 +390,31 @@ RunService.RenderStepped:Connect(function()
                 end
             else 
                 LockedTarget = nil 
-                if isAutoFiring then 
-                    isAutoFiring = false 
-                    task.spawn(function() VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1) end)
-                end
+                if isAutoFiring then isAutoFiring = false SafeRelease() end
             end
         else 
             LockedTarget = nil 
-            if isAutoFiring then 
-                isAutoFiring = false 
-                task.spawn(function() VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1) end)
-            end
+            if isAutoFiring then isAutoFiring = false SafeRelease() end
         end
     else 
         LockedTarget = nil 
-        if isAutoFiring then 
-            isAutoFiring = false 
-            task.spawn(function() VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1) end)
-        end
+        if isAutoFiring then isAutoFiring = false SafeRelease() end
     end
 end)
 
-LocalPlayer.CharacterAdded:Connect(function()
-    if Settings.Fly then Settings.Fly = false end
-    if isAutoFiring then 
-        isAutoFiring = false 
-        task.spawn(function() VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1) end)
-    end
+-- ⚡ 重生後自動續傳飛行狀態
+LocalPlayer.CharacterAdded:Connect(function(newChar)
+    if isAutoFiring then isAutoFiring = false SafeRelease() end
+    
+    -- 等待身體載入後，如果飛行開關是開的，就幫你重新掛上飛行引擎
+    task.delay(0.5, function()
+        if Settings.Fly and newChar:FindFirstChild("HumanoidRootPart") then
+            UpdateFlyState(true)
+        end
+        if Settings.AntiKill then
+            DestroyKillBricks(true)
+        end
+    end)
 end)
 
 Players.PlayerRemoving:Connect(function(plr)
@@ -404,9 +426,6 @@ Players.PlayerRemoving:Connect(function(plr)
     end
     if LockedTarget and LockedTarget.Name == plr.Name then 
         LockedTarget = nil 
-        if isAutoFiring then 
-            isAutoFiring = false 
-            task.spawn(function() VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1) end)
-        end
+        if isAutoFiring then isAutoFiring = false SafeRelease() end
     end
 end)
