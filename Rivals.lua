@@ -1,10 +1,10 @@
 -- ==========================================
--- MUMU PRO - 身體同步視角 + 強化雙模式開火
+-- MUMU PRO - 穩定核心 + 中心點真實開火 + 絕對秒鎖
 -- ==========================================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
-local VirtualInputManager = game:GetService("VirtualInputManager") -- ⚡ 加入備用開火
+local VirtualInputManager = game:GetService("VirtualInputManager")
 local Camera = workspace.CurrentCamera
 local LocalPlayer = Players.LocalPlayer
 
@@ -166,7 +166,7 @@ local function UpdateFlyState(state)
 end
 
 AddToggle("方框與血條 (ESP)", "ESP")
-AddToggle("絕對鎖頭 (身機同步)", "Aimbot")
+AddToggle("絕對鎖頭 (100% 視角)", "Aimbot")
 AddToggle("鎖定後盲射 (不開鏡射擊)", "AutoFire_Hip") 
 AddToggle("開鏡時射擊 (右鍵射擊)", "AutoFire_ADS") 
 AddToggle("不瞄隊友 (Team)", "TeamCheck")
@@ -223,17 +223,12 @@ local function IsVisible(targetChar)
     return true
 end
 
--- ⚡ 強化版隊友檢查 (不再只靠官方 Team 屬性)
+-- ⚡ 修復的隊友判定 (回歸最穩定的官方邏輯，防止全部變隊友)
 local function IsTeammate(p)
     if not Settings.TeamCheck then return false end
-    if p == LocalPlayer then return true end
-    
-    -- 檢查 1：官方 Team 屬性
-    if p.Team and LocalPlayer.Team and p.Team == LocalPlayer.Team then return true end
-    
-    -- 檢查 2：名字顏色 (很多遊戲用這個分隊)
-    if p.TeamColor and LocalPlayer.TeamColor and p.TeamColor == LocalPlayer.TeamColor then return true end
-    
+    if p.Team ~= nil and LocalPlayer.Team ~= nil then 
+        return p.Team == LocalPlayer.Team 
+    end
     return false
 end
 
@@ -285,12 +280,13 @@ local LockedTarget = nil
 local isAutoFiring = false
 local lastRapidFire = 0
 
--- ⚡ 強化版開火邏輯
+-- ⚡ 螢幕中心點真實開火
 local function SafePress()
     if mouse1press then 
         pcall(function() mouse1press() end) 
     else
-        task.spawn(function() VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 1) end)
+        local center = Camera.ViewportSize / 2
+        task.spawn(function() VirtualInputManager:SendMouseButtonEvent(center.X, center.Y, 0, true, game, 1) end)
     end
 end
 
@@ -298,7 +294,8 @@ local function SafeRelease()
     if mouse1release then 
         pcall(function() mouse1release() end) 
     else
-        task.spawn(function() VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1) end)
+        local center = Camera.ViewportSize / 2
+        task.spawn(function() VirtualInputManager:SendMouseButtonEvent(center.X, center.Y, 0, false, game, 1) end)
     end
 end
 
@@ -356,16 +353,10 @@ RunService.RenderStepped:Connect(function()
             local screenPos, onScreen = Camera:WorldToViewportPoint(headPos)
             
             if onScreen then
-                -- ⚡ 終極同步：同時轉動攝影機和人物身體
-                -- 這確保你的槍口(跟隨身體)和視角(跟隨攝影機)完全朝向敵人
+                -- ⚡ 最純粹乾淨的鎖頭 (直接改視角，不再硬轉身體導致錯亂)
                 Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, headPos)
-                if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                    local myHrp = LocalPlayer.Character.HumanoidRootPart
-                    -- 讓身體面對敵人頭部 (忽略 Y 軸，避免人物往上仰倒)
-                    myHrp.CFrame = CFrame.lookAt(myHrp.Position, Vector3.new(headPos.X, myHrp.Position.Y, headPos.Z))
-                end
 
-                -- 開火邏輯
+                -- ⚡ 判斷是否需要開火
                 local shouldFire = false
                 if Settings.AutoFire_ADS and isRightClicking then
                     shouldFire = true
@@ -374,10 +365,9 @@ RunService.RenderStepped:Connect(function()
                 end
 
                 if shouldFire then
-                    -- ⚡ 拉長點擊時間 (0.1秒)，確保伺服器判定開火
-                    if tick() - lastRapidFire > 0.15 then
+                    if tick() - lastRapidFire > 0.1 then
                         SafePress()
-                        task.delay(0.1, function() SafeRelease() end)
+                        task.delay(0.05, function() SafeRelease() end)
                         lastRapidFire = tick()
                     end
                 else
