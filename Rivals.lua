@@ -14,11 +14,11 @@ local Settings = {
     WallCheck = true,  
     Fly = false,       -- ⚡ 新增：飛行模式
     Noclip = false,    -- ⚡ 新增：穿牆模式
-    FlySpeed = 50,     -- ⚡ 飛行速度
+    FlySpeed = 100,     -- ⚡ 飛行速度
     Prediction = 0.12, 
     FOV = 250,
     MaxDistance = 350,
-    Smoothness = 0.8 
+    Smoothness = 1 
 }
 
 -- [[ 1. 絕對中心固定 UI ]]
