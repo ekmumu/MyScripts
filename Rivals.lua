@@ -1,5 +1,5 @@
 -- ==========================================
--- MUMU PRO (V34) - 絕對零壓縮純淨展開版
+-- MUMU PRO (V35) - 移除子彈拐彎 + 智能隊友防誤鎖 (純淨展開版)
 -- ==========================================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -27,7 +27,6 @@ _G.MUMU_ESP_DRAWINGS = {}
 local Settings = {
     ESP = true,
     Aimbot = true,        
-    SilentAim = false,    -- ⚡ 子彈拐彎 (安全版)
     TriggerBot = false,   
     TriggerRadius = 15,   
     AutoFire_ADS = false, 
@@ -54,7 +53,7 @@ ScreenGui.Name = "MUMU_PHYSICS_LOCK"
 ScreenGui.ResetOnSpawn = false
 
 local Main = Instance.new("Frame", ScreenGui)
-Main.Size = UDim2.fromOffset(340, 720) 
+Main.Size = UDim2.fromOffset(340, 680) 
 Main.Position = UDim2.fromScale(0.5, 0.5)
 Main.AnchorPoint = Vector2.new(0.5, 0.5)
 Main.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
@@ -77,7 +76,7 @@ Container.Size = UDim2.new(0.9, 0, 1, -100)
 Container.Position = UDim2.fromScale(0.05, 0.12)
 Container.BackgroundTransparency = 1
 Container.ScrollBarThickness = 2
-Container.CanvasSize = UDim2.new(0, 0, 2.3, 0) 
+Container.CanvasSize = UDim2.new(0, 0, 2.1, 0) 
 
 local Layout = Instance.new("UIListLayout", Container)
 Layout.Padding = UDim.new(0, 8)
@@ -85,8 +84,15 @@ Layout.Padding = UDim.new(0, 8)
 local function AddToggle(name, settingKey, customCallback)
     local btn = Instance.new("TextButton", Container)
     btn.Size = UDim2.new(1, -10, 0, 45)
-    btn.BackgroundColor3 = Settings[settingKey] and Color3.fromRGB(200, 0, 0) or Color3.fromRGB(45, 45, 45)
-    btn.Text = name .. ": " .. (Settings[settingKey] and "ON" or "OFF")
+    
+    if Settings[settingKey] then
+        btn.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
+        btn.Text = name .. ": ON"
+    else
+        btn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+        btn.Text = name .. ": OFF"
+    end
+    
     btn.TextSize = 15
     btn.Font = Enum.Font.GothamBold
     btn.TextColor3 = Color3.new(1, 1, 1)
@@ -94,8 +100,15 @@ local function AddToggle(name, settingKey, customCallback)
     
     btn.MouseButton1Click:Connect(function() 
         Settings[settingKey] = not Settings[settingKey]
-        btn.Text = name .. ": " .. (Settings[settingKey] and "ON" or "OFF")
-        btn.BackgroundColor3 = Settings[settingKey] and Color3.fromRGB(200, 0, 0) or Color3.fromRGB(45, 45, 45) 
+        
+        if Settings[settingKey] then
+            btn.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
+            btn.Text = name .. ": ON"
+        else
+            btn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+            btn.Text = name .. ": OFF"
+        end
+        
         if customCallback then 
             customCallback(Settings[settingKey]) 
         end
@@ -221,7 +234,6 @@ end
 
 -- UI 生成
 AddToggle("方框與血條 (ESP)", "ESP")
-AddToggle("子彈拐彎 (Silent Aim)", "SilentAim") 
 AddToggle("實體滑鼠鎖頭 (右鍵瞄準)", "Aimbot") 
 AddToggle("純扳機 (指到敵人自動開火)", "TriggerBot") 
 AddToggle("自動鎖頭+開火 (開鏡時)", "AutoFire_ADS") 
@@ -318,13 +330,36 @@ local function IsVisible(targetChar)
     return true
 end
 
+-- ⚡ 全新智能隊伍檢查 (Smart Team Check)
 local function IsTeammate(p)
     if not Settings.TeamCheck then 
         return false 
     end
     
-    if p.Team ~= nil and LocalPlayer.Team ~= nil then 
-        return p.Team == LocalPlayer.Team 
+    -- 1. 檢查官方預設 Team
+    if p.Team and LocalPlayer.Team then
+        if p.Team == LocalPlayer.Team then 
+            return true 
+        end
+    end
+    
+    -- 2. 檢查官方 TeamColor (很多遊戲不用 Team 而是用 TeamColor)
+    if p.TeamColor and LocalPlayer.TeamColor then
+        if p.TeamColor == LocalPlayer.TeamColor then
+            return true
+        end
+    end
+    
+    -- 3. 檢查自定義 Team Value (應付客製化遊戲)
+    local myTeamVal = LocalPlayer:FindFirstChild("Team") or LocalPlayer:FindFirstChild("team")
+    local theirTeamVal = p:FindFirstChild("Team") or p:FindFirstChild("team")
+    
+    if myTeamVal and theirTeamVal then
+        if myTeamVal:IsA("StringValue") or myTeamVal:IsA("IntValue") or myTeamVal:IsA("ObjectValue") then
+            if myTeamVal.Value == theirTeamVal.Value then
+                return true
+            end
+        end
     end
     
     return false
@@ -403,6 +438,7 @@ local function UpdateESP()
                 local hp, maxHp = GetHealth(p.Character)
                 
                 if Settings.ESP and p.Character and p.Character:FindFirstChild("HumanoidRootPart") and hp > 0 then
+                    -- ⚡ 套用智能隊友識別，如果是隊友就隱藏透視並跳過
                     if IsTeammate(p) then 
                         drawings.Box.Visible = false
                         drawings.HealthBg.Visible = false
@@ -495,6 +531,7 @@ local function FindNewTarget()
         local hp, _ = GetHealth(p.Character)
         
         if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") and p.Character:FindFirstChild("HumanoidRootPart") and hp > 0 then
+            -- ⚡ 套用智能隊友識別，過濾掉隊友，不鎖定
             if not IsTeammate(p) then
                 local distToPlayer = (Camera.CFrame.Position - p.Character.HumanoidRootPart.Position).Magnitude
                 if distToPlayer <= Settings.MaxDistance then
@@ -513,27 +550,6 @@ local function FindNewTarget()
         end
     end
     return target
-end
-
--- ⚡ 安全版子彈拐彎
-if hookmetamethod then
-    local OldIndex
-    OldIndex = hookmetamethod(game, "__index", function(self, key)
-        if Settings.SilentAim then
-            if _G.LockedTarget then
-                if _G.LockedTarget:FindFirstChild("Head") then
-                    if typeof(self) == "Instance" and self:IsA("Mouse") then
-                        if key == "Hit" then
-                            return _G.LockedTarget.Head.CFrame
-                        elseif key == "Target" then
-                            return _G.LockedTarget.Head
-                        end
-                    end
-                end
-            end
-        end
-        return OldIndex(self, key)
-    end)
 end
 
 -- [[ 4. 戰鬥核心引擎 ]]
@@ -568,12 +584,10 @@ _G.MUMU_PRO_CONNECTION = RunService.RenderStepped:Connect(function()
 
     local isRightClicking = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
     
-    if Settings.Aimbot or Settings.AutoFire_Hip or Settings.AutoFire_ADS or Settings.TriggerBot or Settings.SilentAim then
+    if Settings.Aimbot or Settings.AutoFire_Hip or Settings.AutoFire_ADS or Settings.TriggerBot then
         if not LockedTarget then 
             LockedTarget = FindNewTarget() 
         end
-        
-        _G.LockedTarget = LockedTarget 
 
         local hp, _ = GetHealth(LockedTarget)
         
@@ -583,7 +597,6 @@ _G.MUMU_PRO_CONNECTION = RunService.RenderStepped:Connect(function()
             
             if distFromTarget > Settings.MaxDistance or not IsVisible(LockedTarget) then 
                 LockedTarget = nil
-                _G.LockedTarget = nil
                 return 
             end
 
@@ -636,15 +649,12 @@ _G.MUMU_PRO_CONNECTION = RunService.RenderStepped:Connect(function()
                 end
             else 
                 LockedTarget = nil
-                _G.LockedTarget = nil 
             end
         else 
             LockedTarget = nil
-            _G.LockedTarget = nil 
         end
     else 
         LockedTarget = nil
-        _G.LockedTarget = nil 
     end
 end)
 
@@ -671,7 +681,6 @@ Players.PlayerRemoving:Connect(function(plr)
     if LockedTarget then
         if LockedTarget.Name == plr.Name then 
             LockedTarget = nil
-            _G.LockedTarget = nil 
         end
     end
 end)
