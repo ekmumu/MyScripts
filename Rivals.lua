@@ -1,5 +1,5 @@
 -- ==========================================
--- MUMU PRO (V37) - 終極屬性掃描版 (徹底解決隊友誤鎖)
+-- MUMU PRO (V38) - 隊友過度掃描修復版 (透視與鎖頭復活)
 -- ==========================================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -330,7 +330,7 @@ local function IsVisible(targetChar)
     return true
 end
 
--- ⚡ 終極防護：全方位 Attributes 掃描機
+-- ⚡ 精準版：隊伍檢查 (移除過度泛濫的掃描，避免全場罷工)
 local function IsTeammate(p)
     if not Settings.TeamCheck then 
         return false 
@@ -340,7 +340,7 @@ local function IsTeammate(p)
         return true 
     end
     
-    -- 1. 檢查官方 Team
+    -- 1. 檢查最標準的官方 Team
     if p.Team ~= nil and LocalPlayer.Team ~= nil then
         if p.Team == LocalPlayer.Team then 
             return true 
@@ -354,53 +354,29 @@ local function IsTeammate(p)
         end
     end
     
-    -- 3. 檢查 Roblox 新版 Attributes 系統 (玩家身上)
-    local attrNames = {"Team", "team", "TeamColor", "Faction", "GroupID", "Role"}
-    for _, attr in ipairs(attrNames) do
-        local myAttr = LocalPlayer:GetAttribute(attr)
-        local theirAttr = p:GetAttribute(attr)
-        if myAttr ~= nil and theirAttr ~= nil then
-            if myAttr == theirAttr then 
-                return true 
-            end
-        end
-    end
-    
-    -- 4. 檢查自定義 Value 物件 (玩家身上)
-    local valNames = {"Team", "team", "TeamColor", "Faction"}
-    for _, vName in ipairs(valNames) do
-        local myVal = LocalPlayer:FindFirstChild(vName)
-        local theirVal = p:FindFirstChild(vName)
-        if myVal and theirVal then
-            if myVal:IsA("StringValue") or myVal:IsA("IntValue") or myVal:IsA("Color3Value") or myVal:IsA("BrickColorValue") then
-                if myVal.Value == theirVal.Value then 
-                    return true 
-                end
-            end
-        end
-    end
-    
-    -- 5. 檢查 Attributes 與 Value (肉體 Character 身上，很多現代遊戲把隊伍掛在肉體上)
-    if LocalPlayer.Character and p.Character then
-        for _, attr in ipairs(attrNames) do
-            local myCAttr = LocalPlayer.Character:GetAttribute(attr)
-            local theirCAttr = p.Character:GetAttribute(attr)
-            if myCAttr ~= nil and theirCAttr ~= nil then
-                if myCAttr == theirCAttr then 
-                    return true 
-                end
-            end
+    -- 3. 只檢查名為 "Team" 或 "TeamColor" 的明確數值，避免誤抓
+    local exactNames = {"Team", "team", "TeamColor"}
+    for _, name in ipairs(exactNames) do
+        -- 檢查屬性 (Attributes)
+        local myAttr = LocalPlayer:GetAttribute(name)
+        local theirAttr = p:GetAttribute(name)
+        if myAttr ~= nil and theirAttr ~= nil and myAttr == theirAttr then
+            return true
         end
         
-        for _, vName in ipairs(valNames) do
-            local myCVal = LocalPlayer.Character:FindFirstChild(vName)
-            local theirCVal = p.Character:FindFirstChild(vName)
-            if myCVal and theirCVal then
-                if myCVal:IsA("StringValue") or myCVal:IsA("IntValue") or myCVal:IsA("Color3Value") or myCVal:IsA("BrickColorValue") then
-                    if myCVal.Value == theirCVal.Value then 
-                        return true 
-                    end
-                end
+        -- 檢查自定義節點 (Value)
+        local myVal = LocalPlayer:FindFirstChild(name)
+        local theirVal = p:FindFirstChild(name)
+        if myVal and theirVal and myVal.Value == theirVal.Value then
+            return true
+        end
+        
+        -- 檢查肉體上 (Character) 的屬性
+        if LocalPlayer.Character and p.Character then
+            local myCAttr = LocalPlayer.Character:GetAttribute(name)
+            local theirCAttr = p.Character:GetAttribute(name)
+            if myCAttr ~= nil and theirCAttr ~= nil and myCAttr == theirCAttr then
+                return true
             end
         end
     end
