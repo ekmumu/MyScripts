@@ -1,4 +1,6 @@
-
+-- ==========================================
+-- MUMU PRO (V31) - 智能血量判定 + 通用子彈拐彎 (Silent Aim)
+-- ==========================================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -6,7 +8,7 @@ local VirtualInputManager = game:GetService("VirtualInputManager")
 local Camera = workspace.CurrentCamera
 local LocalPlayer = Players.LocalPlayer
 
-
+-- [[ 0. 核心防禦：全局清理系統 ]]
 if _G.MUMU_PRO_CONNECTION then 
     _G.MUMU_PRO_CONNECTION:Disconnect() 
 end
@@ -22,9 +24,10 @@ _G.MUMU_ESP_DRAWINGS = {}
 
 local Settings = {
     ESP = true,
-    Aimbot = true,       
+    Aimbot = true,        
+    SilentAim = false,    -- ⚡ 新增：子彈拐彎 (Silent Aim)
     TriggerBot = false,   
-    TriggerRadius = 15,  
+    TriggerRadius = 15,   
     AutoFire_ADS = false, 
     AutoFire_Hip = false, 
     TeamCheck = true,  
@@ -48,7 +51,7 @@ ScreenGui.Name = "MUMU_PHYSICS_LOCK"
 ScreenGui.ResetOnSpawn = false
 
 local Main = Instance.new("Frame", ScreenGui)
-Main.Size = UDim2.fromOffset(340, 680)
+Main.Size = UDim2.fromOffset(340, 720) -- 加高容納新按鈕
 Main.Position = UDim2.fromScale(0.5, 0.5)
 Main.AnchorPoint = Vector2.new(0.5, 0.5)
 Main.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
@@ -71,7 +74,7 @@ Container.Size = UDim2.new(0.9, 0, 1, -100)
 Container.Position = UDim2.fromScale(0.05, 0.12)
 Container.BackgroundTransparency = 1
 Container.ScrollBarThickness = 2
-Container.CanvasSize = UDim2.new(0, 0, 2.2, 0) 
+Container.CanvasSize = UDim2.new(0, 0, 2.3, 0) 
 
 local Layout = Instance.new("UIListLayout", Container)
 Layout.Padding = UDim.new(0, 8)
@@ -153,7 +156,6 @@ local function AddAdjuster(name, settingKey, step, min, max)
     end)
 end
 
-
 local FlyBodyGyro, FlyBodyVelocity
 local CONTROL = {F = 0, B = 0, L = 0, R = 0, UP = 0, DOWN = 0}
 
@@ -176,20 +178,17 @@ local function UpdateFlyState(state)
             FlyBodyVelocity.velocity = Vector3.new(0, 0, 0)
             FlyBodyVelocity.maxForce = Vector3.new(9e9, 9e9, 9e9) 
         end
-        if char:FindFirstChild("Humanoid") then 
-            char.Humanoid.PlatformStand = true 
-        end
+        if char:FindFirstChild("Humanoid") then char.Humanoid.PlatformStand = true end
     else
         if hrp:FindFirstChild("MUMU_GYRO") then hrp.MUMU_GYRO:Destroy() end
         if hrp:FindFirstChild("MUMU_VELOCITY") then hrp.MUMU_VELOCITY:Destroy() end
-        if char:FindFirstChild("Humanoid") then 
-            char.Humanoid.PlatformStand = false 
-        end
+        if char:FindFirstChild("Humanoid") then char.Humanoid.PlatformStand = false end
     end
 end
 
-
+-- UI 按鈕生成
 AddToggle("方框與血條 (ESP)", "ESP")
+AddToggle("子彈拐彎 (Silent Aim)", "SilentAim") -- ⚡ 新功能：子彈拐彎
 AddToggle("實體滑鼠鎖頭 (右鍵瞄準)", "Aimbot") 
 AddToggle("純扳機 (指到敵人自動開火)", "TriggerBot") 
 AddToggle("自動鎖頭+開火 (開鏡時)", "AutoFire_ADS") 
@@ -200,44 +199,24 @@ AddToggle("飛行模式常駐 (Fly)", "Fly")
 AddToggle("穿牆模式 (Noclip)", "Noclip")           
 
 AddAdjuster("鎖頭推力 (太抖請調低)", "AimbotSens", 0.1, 0.1, 2.0)
-AddAdjuster("扳機判定範圍", "TriggerRadius", 5, 5, 100) 
+AddAdjuster("扳機判定範圍", "TriggerRadius", 5, 5, 100)
 AddAdjuster("飛行速度", "FlySpeed", 20, 20, 300)
 AddAdjuster("FOV 鎖定範圍", "FOV", 25, 50, 800)
 
 local Hint = Instance.new("TextLabel", Main)
-Hint.Size = UDim2.new(1, 0, 0, 25)
-Hint.Position = UDim2.new(0, 0, 1, -25)
-Hint.Text = "按 [J] 顯示/隱藏面板"
-Hint.TextColor3 = Color3.fromRGB(150, 150, 150)
-Hint.TextSize = 13
-Hint.Font = Enum.Font.Gotham
-Hint.BackgroundTransparency = 1
+Hint.Size = UDim2.new(1, 0, 0, 25); Hint.Position = UDim2.new(0, 0, 1, -25); Hint.Text = "按 [J] 顯示/隱藏面板"; Hint.TextColor3 = Color3.fromRGB(150, 150, 150); Hint.TextSize = 13; Hint.Font = Enum.Font.Gotham; Hint.BackgroundTransparency = 1
 
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if not gameProcessed and input.KeyCode == Enum.KeyCode.J then 
-        Main.Visible = not Main.Visible 
-    end
+    if not gameProcessed and input.KeyCode == Enum.KeyCode.J then Main.Visible = not Main.Visible end
     if not gameProcessed then
         local k = input.KeyCode
-        if k == Enum.KeyCode.W then CONTROL.F = 1 
-        elseif k == Enum.KeyCode.S then CONTROL.B = -1 
-        elseif k == Enum.KeyCode.A then CONTROL.L = -1 
-        elseif k == Enum.KeyCode.D then CONTROL.R = 1 
-        elseif k == Enum.KeyCode.Space then CONTROL.UP = 1 
-        elseif k == Enum.KeyCode.LeftControl then CONTROL.DOWN = -1 
-        end
+        if k == Enum.KeyCode.W then CONTROL.F = 1 elseif k == Enum.KeyCode.S then CONTROL.B = -1 elseif k == Enum.KeyCode.A then CONTROL.L = -1 elseif k == Enum.KeyCode.D then CONTROL.R = 1 elseif k == Enum.KeyCode.Space then CONTROL.UP = 1 elseif k == Enum.KeyCode.LeftControl then CONTROL.DOWN = -1 end
     end
 end)
 
 UserInputService.InputEnded:Connect(function(input, gameProcessed)
     local k = input.KeyCode
-    if k == Enum.KeyCode.W then CONTROL.F = 0 
-    elseif k == Enum.KeyCode.S then CONTROL.B = 0 
-    elseif k == Enum.KeyCode.A then CONTROL.L = 0 
-    elseif k == Enum.KeyCode.D then CONTROL.R = 0 
-    elseif k == Enum.KeyCode.Space then CONTROL.UP = 0 
-    elseif k == Enum.KeyCode.LeftControl then CONTROL.DOWN = 0 
-    end
+    if k == Enum.KeyCode.W then CONTROL.F = 0 elseif k == Enum.KeyCode.S then CONTROL.B = 0 elseif k == Enum.KeyCode.A then CONTROL.L = 0 elseif k == Enum.KeyCode.D then CONTROL.R = 0 elseif k == Enum.KeyCode.Space then CONTROL.UP = 0 elseif k == Enum.KeyCode.LeftControl then CONTROL.DOWN = 0 end
 end)
 
 local function IsVisible(targetChar)
@@ -251,63 +230,69 @@ local function IsVisible(targetChar)
     rayParams.IgnoreWater = true
     local result = workspace:Raycast(origin, targetPos - origin, rayParams)
     if result then 
-        if result.Instance:IsDescendantOf(targetChar) then 
-            return true 
-        else 
-            return false 
-        end 
+        if result.Instance:IsDescendantOf(targetChar) then return true else return false end 
     end
     return true
 end
 
 local function IsTeammate(p)
     if not Settings.TeamCheck then return false end
-    if p.Team ~= nil and LocalPlayer.Team ~= nil then 
-        return p.Team == LocalPlayer.Team 
-    end
+    if p.Team ~= nil and LocalPlayer.Team ~= nil then return p.Team == LocalPlayer.Team end
     return false
+end
+
+-- ⚡ 智能獲取血量 (應對遊戲自定義血量系統)
+local function GetHealth(char)
+    if not char then return 0, 100 end
+    
+    -- 1. 嘗試讀取遊戲常見的自定義 Value
+    local customHealth = char:FindFirstChild("Health") or char:FindFirstChild("HP")
+    local customMaxHealth = char:FindFirstChild("MaxHealth") or char:FindFirstChild("MaxHP")
+    
+    if customHealth and customHealth:IsA("NumberValue") or customHealth:IsA("IntValue") then
+        local hp = customHealth.Value
+        local maxHp = (customMaxHealth and (customMaxHealth:IsA("NumberValue") or customMaxHealth:IsA("IntValue")) and customMaxHealth.Value) or 100
+        return hp, maxHp
+    end
+    
+    -- 2. 如果沒有自定義 Value，退回官方 Humanoid 讀取
+    local hum = char:FindFirstChild("Humanoid")
+    if hum then
+        return hum.Health, hum.MaxHealth
+    end
+    
+    return 0, 100
 end
 
 RunService.Stepped:Connect(function()
     if Settings.Noclip and LocalPlayer.Character then
         for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
-            if part:IsA("BasePart") and part.CanCollide then 
-                part.CanCollide = false 
-            end
+            if part:IsA("BasePart") and part.CanCollide then part.CanCollide = false end
         end
     end
 end)
-
 
 local function UpdateESP()
     for _, p in pairs(Players:GetPlayers()) do
         if p ~= LocalPlayer then
             if not _G.MUMU_ESP_DRAWINGS[p] then
-               
                 _G.MUMU_ESP_DRAWINGS[p] = { 
                     Box = Drawing.new("Square"), 
                     HealthBg = Drawing.new("Line"), 
                     HealthBar = Drawing.new("Line") 
                 }
-                _G.MUMU_ESP_DRAWINGS[p].Box.Color = Color3.fromRGB(255, 50, 50)
-                _G.MUMU_ESP_DRAWINGS[p].Box.Thickness = 1.5
-                _G.MUMU_ESP_DRAWINGS[p].Box.Filled = false
-                
-                _G.MUMU_ESP_DRAWINGS[p].HealthBg.Color = Color3.fromRGB(0, 0, 0)
-                _G.MUMU_ESP_DRAWINGS[p].HealthBg.Thickness = 4
-                
+                _G.MUMU_ESP_DRAWINGS[p].Box.Color = Color3.fromRGB(255, 50, 50); _G.MUMU_ESP_DRAWINGS[p].Box.Thickness = 1.5; _G.MUMU_ESP_DRAWINGS[p].Box.Filled = false
+                _G.MUMU_ESP_DRAWINGS[p].HealthBg.Color = Color3.fromRGB(0, 0, 0); _G.MUMU_ESP_DRAWINGS[p].HealthBg.Thickness = 4
                 _G.MUMU_ESP_DRAWINGS[p].HealthBar.Thickness = 2
             end
 
             local drawings = _G.MUMU_ESP_DRAWINGS[p]
             local success, _ = pcall(function()
-                if Settings.ESP and p.Character and p.Character:FindFirstChild("HumanoidRootPart") and p.Character:FindFirstChild("Humanoid") and p.Character.Humanoid.Health > 0 then
-                    
+                local hp, maxHp = GetHealth(p.Character)
+                
+                if Settings.ESP and p.Character and p.Character:FindFirstChild("HumanoidRootPart") and hp > 0 then
                     if IsTeammate(p) then 
-                        drawings.Box.Visible = false
-                        drawings.HealthBg.Visible = false
-                        drawings.HealthBar.Visible = false 
-                        return 
+                        drawings.Box.Visible = false; drawings.HealthBg.Visible = false; drawings.HealthBar.Visible = false return 
                     end
                     
                     local hrp = p.Character.HumanoidRootPart
@@ -325,40 +310,24 @@ local function UpdateESP()
                             drawings.Box.Position = Vector2.new(centerPos.X - width/2, topPos.Y)
                             drawings.Box.Visible = true
                             
-                            
-                            local health = tonumber(p.Character.Humanoid.Health) or 0
-                            local maxHealth = tonumber(p.Character.Humanoid.MaxHealth) or 100
+                            -- 嚴格血量計算
+                            local maxHealth = tonumber(maxHp) or 100
                             if maxHealth <= 0 then maxHealth = 100 end
                             
-                            local healthPercent = math.clamp(health / maxHealth, 0, 1)
+                            local healthPercent = math.clamp(hp / maxHealth, 0, 1)
                             if healthPercent ~= healthPercent then healthPercent = 1 end
                             
-                           
                             local barX = centerPos.X - width/2 - 6
-                            
-                            drawings.HealthBg.From = Vector2.new(barX, bottomPos.Y)
-                            drawings.HealthBg.To = Vector2.new(barX, topPos.Y)
-                            drawings.HealthBg.Visible = true
+                            drawings.HealthBg.From = Vector2.new(barX, bottomPos.Y); drawings.HealthBg.To = Vector2.new(barX, topPos.Y); drawings.HealthBg.Visible = true
                             
                             local barHeight = height * healthPercent
-                            drawings.HealthBar.From = Vector2.new(barX, bottomPos.Y)
-                            drawings.HealthBar.To = Vector2.new(barX, bottomPos.Y - barHeight)
-                            drawings.HealthBar.Color = Color3.fromHSV(healthPercent * 0.3, 1, 1)
-                            drawings.HealthBar.Visible = true
-                        else 
-                            drawings.Box.Visible = false; drawings.HealthBg.Visible = false; drawings.HealthBar.Visible = false 
-                        end
-                    else 
-                        drawings.Box.Visible = false; drawings.HealthBg.Visible = false; drawings.HealthBar.Visible = false 
-                    end
-                else 
-                    drawings.Box.Visible = false; drawings.HealthBg.Visible = false; drawings.HealthBar.Visible = false 
-                end
+                            drawings.HealthBar.From = Vector2.new(barX, bottomPos.Y); drawings.HealthBar.To = Vector2.new(barX, bottomPos.Y - barHeight)
+                            drawings.HealthBar.Color = Color3.fromHSV(healthPercent * 0.3, 1, 1); drawings.HealthBar.Visible = true
+                        else drawings.Box.Visible = false; drawings.HealthBg.Visible = false; drawings.HealthBar.Visible = false end
+                    else drawings.Box.Visible = false; drawings.HealthBg.Visible = false; drawings.HealthBar.Visible = false end
+                else drawings.Box.Visible = false; drawings.HealthBg.Visible = false; drawings.HealthBar.Visible = false end
             end)
-            
-            if not success then 
-                drawings.Box.Visible = false; drawings.HealthBg.Visible = false; drawings.HealthBar.Visible = false 
-            end
+            if not success then drawings.Box.Visible = false; drawings.HealthBg.Visible = false; drawings.HealthBar.Visible = false end
         end
     end
 end
@@ -367,13 +336,10 @@ local LockedTarget = nil
 local lastRapidFire = 0
 
 local function FireWeapon()
-    if mouse1click then 
-        pcall(function() mouse1click() end) 
-    else
+    if mouse1click then pcall(function() mouse1click() end) else
         local center = Camera.ViewportSize / 2
         task.spawn(function()
-            VirtualInputManager:SendMouseButtonEvent(center.X, center.Y, 0, true, game, 1)
-            task.wait(0.01)
+            VirtualInputManager:SendMouseButtonEvent(center.X, center.Y, 0, true, game, 1); task.wait(0.01)
             VirtualInputManager:SendMouseButtonEvent(center.X, center.Y, 0, false, game, 1)
         end)
     end
@@ -385,8 +351,8 @@ local function FindNewTarget()
     local screenCenter = Camera.ViewportSize / 2 
     
     for _, p in pairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") and p.Character:FindFirstChild("Humanoid") and p.Character.Humanoid.Health > 0 then
-            
+        local hp, _ = GetHealth(p.Character)
+        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") and p.Character:FindFirstChild("HumanoidRootPart") and hp > 0 then
             if IsTeammate(p) then continue end
             if (Camera.CFrame.Position - p.Character.HumanoidRootPart.Position).Magnitude > Settings.MaxDistance then continue end
             if not IsVisible(p.Character) then continue end
@@ -394,47 +360,61 @@ local function FindNewTarget()
             local pos, onScreen = Camera:WorldToViewportPoint(p.Character.Head.Position)
             if onScreen then
                 local dist = (Vector2.new(pos.X, pos.Y) - screenCenter).Magnitude
-                if dist < maxDist then 
-                    maxDist = dist
-                    target = p.Character 
-                end
+                if dist < maxDist then maxDist = dist; target = p.Character end
             end
         end
     end
     return target
 end
 
+-- ⚡ 通用型子彈拐彎 (Silent Aim) 模組
+local OldNamecall
+OldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
+    local method = getnamecallmethod()
+    local args = {...}
+    
+    if Settings.SilentAim and LockedTarget and LockedTarget:FindFirstChild("Head") then
+        if method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRayWithWhitelist" or method == "FindPartOnRay" then
+            -- 劫持射線，把射線終點改為敵人頭部
+            local origin = args[1].Origin
+            local direction = (LockedTarget.Head.Position - origin).Unit * 1000
+            args[1] = Ray.new(origin, direction)
+            return OldNamecall(self, unpack(args))
+        elseif method == "Raycast" then
+            -- 劫持新版 Raycast
+            local origin = args[1]
+            local direction = (LockedTarget.Head.Position - origin).Unit * 1000
+            args[2] = direction
+            return OldNamecall(self, unpack(args))
+        end
+    end
+    return OldNamecall(self, ...)
+end)
 
 _G.MUMU_PRO_CONNECTION = RunService.RenderStepped:Connect(function()
     UpdateESP()
 
-    
     if Settings.Fly and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
         local hrp = LocalPlayer.Character.HumanoidRootPart
         local gyro = hrp:FindFirstChild("MUMU_GYRO"); local vel = hrp:FindFirstChild("MUMU_VELOCITY")
         if gyro and vel then
-            local camCF = Camera.CFrame
-            gyro.cframe = camCF
+            local camCF = Camera.CFrame; gyro.cframe = camCF
             local moveDir = Vector3.new(0, 0, 0)
-            moveDir = moveDir + camCF.LookVector * (CONTROL.F + CONTROL.B)
-            moveDir = moveDir + camCF.RightVector * (CONTROL.L + CONTROL.R)
-            moveDir = moveDir + camCF.UpVector * (CONTROL.UP + CONTROL.DOWN)
+            moveDir = moveDir + camCF.LookVector * (CONTROL.F + CONTROL.B); moveDir = moveDir + camCF.RightVector * (CONTROL.L + CONTROL.R); moveDir = moveDir + camCF.UpVector * (CONTROL.UP + CONTROL.DOWN)
             if moveDir.Magnitude > 0 then vel.velocity = moveDir.Unit * Settings.FlySpeed else vel.velocity = Vector3.new(0, 0, 0) end
         end
     end
 
     local isRightClicking = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
     
-    
-    if Settings.Aimbot or Settings.AutoFire_Hip or Settings.AutoFire_ADS or Settings.TriggerBot then
-        
+    if Settings.Aimbot or Settings.AutoFire_Hip or Settings.AutoFire_ADS or Settings.TriggerBot or Settings.SilentAim then
         if not LockedTarget then LockedTarget = FindNewTarget() end
 
-        if LockedTarget and LockedTarget:FindFirstChild("Head") and LockedTarget:FindFirstChild("Humanoid") and LockedTarget.Humanoid.Health > 0 then
+        local hp, _ = GetHealth(LockedTarget)
+        if LockedTarget and LockedTarget:FindFirstChild("Head") and LockedTarget:FindFirstChild("HumanoidRootPart") and hp > 0 then
             
             if (Camera.CFrame.Position - LockedTarget.HumanoidRootPart.Position).Magnitude > Settings.MaxDistance or not IsVisible(LockedTarget) then 
-                LockedTarget = nil
-                return 
+                LockedTarget = nil; return 
             end
 
             local headPos = LockedTarget.Head.Position + (LockedTarget.HumanoidRootPart.Velocity * Settings.Prediction)
@@ -446,55 +426,37 @@ _G.MUMU_PRO_CONNECTION = RunService.RenderStepped:Connect(function()
                 local deltaY = screenPos.Y - screenCenter.Y
                 local distToCenter = math.sqrt(deltaX^2 + deltaY^2)
 
-               
                 local shouldAim = false
                 if Settings.Aimbot and isRightClicking then shouldAim = true end
                 if Settings.AutoFire_ADS and isRightClicking then shouldAim = true end
                 if Settings.AutoFire_Hip then shouldAim = true end 
 
-                
                 if shouldAim then
-                    if mousemoverel then
-                        mousemoverel(deltaX * Settings.AimbotSens, deltaY * Settings.AimbotSens)
-                    end
+                    if mousemoverel then mousemoverel(deltaX * Settings.AimbotSens, deltaY * Settings.AimbotSens) end
                 end
 
-                
                 local shouldFire = false
                 if Settings.AutoFire_ADS and isRightClicking then shouldFire = true end
                 if Settings.AutoFire_Hip then shouldFire = true end
                 if Settings.TriggerBot and distToCenter <= Settings.TriggerRadius then shouldFire = true end
 
-                
                 if shouldFire then
                     if tick() - lastRapidFire > 0.05 then
-                        FireWeapon()
-                        lastRapidFire = tick()
+                        FireWeapon(); lastRapidFire = tick()
                     end
                 end
-            else 
-                LockedTarget = nil 
-            end
-        else 
-            LockedTarget = nil 
-        end
-    else 
-        LockedTarget = nil 
-    end
+            else LockedTarget = nil end
+        else LockedTarget = nil end
+    else LockedTarget = nil end
 end)
 
 LocalPlayer.CharacterAdded:Connect(function(newChar)
-    task.delay(0.5, function()
-        if Settings.Fly and newChar:FindFirstChild("HumanoidRootPart") then UpdateFlyState(true) end
-    end)
+    task.delay(0.5, function() if Settings.Fly and newChar:FindFirstChild("HumanoidRootPart") then UpdateFlyState(true) end end)
 end)
 
 Players.PlayerRemoving:Connect(function(plr)
     if _G.MUMU_ESP_DRAWINGS and _G.MUMU_ESP_DRAWINGS[plr] then 
-        _G.MUMU_ESP_DRAWINGS[plr].Box:Remove()
-        _G.MUMU_ESP_DRAWINGS[plr].HealthBg:Remove()
-        _G.MUMU_ESP_DRAWINGS[plr].HealthBar:Remove()
-        _G.MUMU_ESP_DRAWINGS[plr] = nil 
+        _G.MUMU_ESP_DRAWINGS[plr].Box:Remove(); _G.MUMU_ESP_DRAWINGS[plr].HealthBg:Remove(); _G.MUMU_ESP_DRAWINGS[plr].HealthBar:Remove(); _G.MUMU_ESP_DRAWINGS[plr] = nil 
     end
     if LockedTarget and LockedTarget.Name == plr.Name then LockedTarget = nil end
 end)
