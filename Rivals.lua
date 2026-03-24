@@ -1,5 +1,5 @@
 -- ==========================================
--- MUMU PRO (V39) - 隊友判斷極簡化 (解除全場誤判封印)
+-- MUMU PRO (V40) - 專為 Rivals 打造的手動白名單版
 -- ==========================================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -24,6 +24,9 @@ if _G.MUMU_ESP_DRAWINGS then
 end
 _G.MUMU_ESP_DRAWINGS = {}
 
+-- ⚡ 專屬隊友白名單庫
+local WhitelistedPlayers = {}
+
 local Settings = {
     ESP = true,
     Aimbot = true,        
@@ -31,7 +34,6 @@ local Settings = {
     TriggerRadius = 15,   
     AutoFire_ADS = false, 
     AutoFire_Hip = false, 
-    TeamCheck = true,  
     WallCheck = true,  
     Fly = false,       
     Noclip = false,    
@@ -53,7 +55,7 @@ ScreenGui.Name = "MUMU_PHYSICS_LOCK"
 ScreenGui.ResetOnSpawn = false
 
 local Main = Instance.new("Frame", ScreenGui)
-Main.Size = UDim2.fromOffset(340, 680) 
+Main.Size = UDim2.fromOffset(350, 680) 
 Main.Position = UDim2.fromScale(0.5, 0.5)
 Main.AnchorPoint = Vector2.new(0.5, 0.5)
 Main.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
@@ -238,7 +240,6 @@ AddToggle("實體滑鼠鎖頭 (右鍵瞄準)", "Aimbot")
 AddToggle("純扳機 (指到敵人自動開火)", "TriggerBot") 
 AddToggle("自動鎖頭+開火 (開鏡時)", "AutoFire_ADS") 
 AddToggle("暴力鎖頭+開火 (不開鏡)", "AutoFire_Hip") 
-AddToggle("不瞄隊友 (Team)", "TeamCheck")
 AddToggle("隔牆不瞄 (Wall)", "WallCheck")
 AddToggle("飛行模式常駐 (Fly)", "Fly", UpdateFlyState)     
 AddToggle("穿牆模式 (Noclip)", "Noclip", UpdateNoclipState) 
@@ -249,18 +250,57 @@ AddAdjuster("飛行速度", "FlySpeed", 20, 20, 300)
 AddAdjuster("FOV 鎖定範圍", "FOV", 25, 50, 800)
 
 local Hint = Instance.new("TextLabel", Main)
-Hint.Size = UDim2.new(1, 0, 0, 25)
-Hint.Position = UDim2.new(0, 0, 1, -25)
-Hint.Text = "按 [J] 顯示/隱藏面板"
-Hint.TextColor3 = Color3.fromRGB(150, 150, 150)
+Hint.Size = UDim2.new(1, 0, 0, 35)
+Hint.Position = UDim2.new(0, 0, 1, -35)
+Hint.Text = "按 [J] 隱藏面板 | 準心對準隊友按 [T] 加白名單"
+Hint.TextColor3 = Color3.fromRGB(0, 255, 100)
 Hint.TextSize = 13
-Hint.Font = Enum.Font.Gotham
+Hint.Font = Enum.Font.GothamBold
 Hint.BackgroundTransparency = 1
 
+-- ⚡ 準心白名單標記系統
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if not gameProcessed then
         if input.KeyCode == Enum.KeyCode.J then 
             Main.Visible = not Main.Visible 
+        end
+        
+        -- 按下 T 鍵 或 滑鼠中鍵 來標記/取消隊友
+        if input.KeyCode == Enum.KeyCode.T or input.UserInputType == Enum.UserInputType.MouseButton3 then
+            local closestPlr = nil
+            local maxD = Settings.FOV
+            local center = Camera.ViewportSize / 2
+            
+            for _, p in pairs(Players:GetPlayers()) do
+                if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") then
+                    local pos, onScreen = Camera:WorldToViewportPoint(p.Character.Head.Position)
+                    if onScreen then
+                        local d = (Vector2.new(pos.X, pos.Y) - center).Magnitude
+                        if d < maxD then
+                            maxD = d
+                            closestPlr = p
+                        end
+                    end
+                end
+            end
+            
+            if closestPlr then
+                if WhitelistedPlayers[closestPlr.UserId] then
+                    WhitelistedPlayers[closestPlr.UserId] = nil
+                    Hint.Text = "❌ 移除隊友: " .. closestPlr.Name
+                    Hint.TextColor3 = Color3.fromRGB(255, 50, 50)
+                else
+                    WhitelistedPlayers[closestPlr.UserId] = true
+                    Hint.Text = "✅ 新增隊友: " .. closestPlr.Name
+                    Hint.TextColor3 = Color3.fromRGB(50, 255, 50)
+                end
+                
+                -- 2秒後恢復預設提示
+                task.delay(2, function() 
+                    Hint.Text = "按 [J] 隱藏面板 | 準心對準隊友按 [T] 加白名單" 
+                    Hint.TextColor3 = Color3.fromRGB(0, 255, 100)
+                end)
+            end
         end
         
         local k = input.KeyCode
@@ -330,24 +370,16 @@ local function IsVisible(targetChar)
     return true
 end
 
--- ⚡ 極簡版隊友判斷 (拔掉所有可能造成全場誤判的自定義掃描)
+-- ⚡ 判斷是否為「手動標記的隊友」
 local function IsTeammate(p)
-    if not Settings.TeamCheck then 
-        return false 
-    end
-    
     if p == LocalPlayer then 
         return true 
     end
     
-    -- 只檢查 Roblox 最官方、最基礎的 Team 屬性
-    if p.Team ~= nil and LocalPlayer.Team ~= nil then
-        if p.Team == LocalPlayer.Team then 
-            return true 
-        end
+    if WhitelistedPlayers[p.UserId] then
+        return true
     end
     
-    -- 不再去猜測其他隱藏屬性了，避免把所有人都當隊友
     return false
 end
 
@@ -425,6 +457,7 @@ local function UpdateESP()
                 
                 if Settings.ESP and p.Character and p.Character:FindFirstChild("HumanoidRootPart") and hp > 0 then
                     
+                    -- 如果是白名單隊友，直接隱藏透視框
                     if IsTeammate(p) then 
                         drawings.Box.Visible = false
                         drawings.HealthBg.Visible = false
@@ -518,6 +551,7 @@ local function FindNewTarget()
         
         if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") and p.Character:FindFirstChild("HumanoidRootPart") and hp > 0 then
             
+            -- 過濾掉白名單內的隊友
             if not IsTeammate(p) then
                 local distToPlayer = (Camera.CFrame.Position - p.Character.HumanoidRootPart.Position).Magnitude
                 if distToPlayer <= Settings.MaxDistance then
@@ -662,6 +696,11 @@ Players.PlayerRemoving:Connect(function(plr)
             _G.MUMU_ESP_DRAWINGS[plr].HealthBar:Remove()
             _G.MUMU_ESP_DRAWINGS[plr] = nil 
         end
+    end
+    
+    -- 清理離線玩家的白名單
+    if WhitelistedPlayers[plr.UserId] then
+        WhitelistedPlayers[plr.UserId] = nil
     end
     
     if LockedTarget then
