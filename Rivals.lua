@@ -1,5 +1,5 @@
 -- ==========================================
--- MUMU PRO (V38) - 隊友過度掃描修復版 (透視與鎖頭復活)
+-- MUMU PRO (V39) - 隊友判斷極簡化 (解除全場誤判封印)
 -- ==========================================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -330,7 +330,7 @@ local function IsVisible(targetChar)
     return true
 end
 
--- ⚡ 精準版：隊伍檢查 (移除過度泛濫的掃描，避免全場罷工)
+-- ⚡ 極簡版隊友判斷 (拔掉所有可能造成全場誤判的自定義掃描)
 local function IsTeammate(p)
     if not Settings.TeamCheck then 
         return false 
@@ -340,47 +340,14 @@ local function IsTeammate(p)
         return true 
     end
     
-    -- 1. 檢查最標準的官方 Team
+    -- 只檢查 Roblox 最官方、最基礎的 Team 屬性
     if p.Team ~= nil and LocalPlayer.Team ~= nil then
         if p.Team == LocalPlayer.Team then 
             return true 
         end
     end
     
-    -- 2. 檢查官方 TeamColor
-    if p.TeamColor ~= nil and LocalPlayer.TeamColor ~= nil then
-        if p.TeamColor == LocalPlayer.TeamColor then 
-            return true 
-        end
-    end
-    
-    -- 3. 只檢查名為 "Team" 或 "TeamColor" 的明確數值，避免誤抓
-    local exactNames = {"Team", "team", "TeamColor"}
-    for _, name in ipairs(exactNames) do
-        -- 檢查屬性 (Attributes)
-        local myAttr = LocalPlayer:GetAttribute(name)
-        local theirAttr = p:GetAttribute(name)
-        if myAttr ~= nil and theirAttr ~= nil and myAttr == theirAttr then
-            return true
-        end
-        
-        -- 檢查自定義節點 (Value)
-        local myVal = LocalPlayer:FindFirstChild(name)
-        local theirVal = p:FindFirstChild(name)
-        if myVal and theirVal and myVal.Value == theirVal.Value then
-            return true
-        end
-        
-        -- 檢查肉體上 (Character) 的屬性
-        if LocalPlayer.Character and p.Character then
-            local myCAttr = LocalPlayer.Character:GetAttribute(name)
-            local theirCAttr = p.Character:GetAttribute(name)
-            if myCAttr ~= nil and theirCAttr ~= nil and myCAttr == theirCAttr then
-                return true
-            end
-        end
-    end
-    
+    -- 不再去猜測其他隱藏屬性了，避免把所有人都當隊友
     return false
 end
 
