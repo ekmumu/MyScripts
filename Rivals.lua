@@ -1,5 +1,5 @@
 -- ==========================================
--- MUMU PRO (V35) - 移除子彈拐彎 + 智能隊友防誤鎖 (純淨展開版)
+-- MUMU PRO (V36) - 隊伍邏輯致命 Bug 修復版
 -- ==========================================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -330,27 +330,19 @@ local function IsVisible(targetChar)
     return true
 end
 
--- ⚡ 全新智能隊伍檢查 (Smart Team Check)
+-- ⚡ 嚴格防禦版：隊伍檢查 (修復「所有人都是隊友」的 BUG)
 local function IsTeammate(p)
     if not Settings.TeamCheck then 
         return false 
     end
     
-    -- 1. 檢查官方預設 Team
-    if p.Team and LocalPlayer.Team then
+    -- 確保隊伍屬性真的存在且不為 nil，才進行判斷
+    if p.Team ~= nil and LocalPlayer.Team ~= nil then
         if p.Team == LocalPlayer.Team then 
             return true 
         end
     end
     
-    -- 2. 檢查官方 TeamColor (很多遊戲不用 Team 而是用 TeamColor)
-    if p.TeamColor and LocalPlayer.TeamColor then
-        if p.TeamColor == LocalPlayer.TeamColor then
-            return true
-        end
-    end
-    
-    -- 3. 檢查自定義 Team Value (應付客製化遊戲)
     local myTeamVal = LocalPlayer:FindFirstChild("Team") or LocalPlayer:FindFirstChild("team")
     local theirTeamVal = p:FindFirstChild("Team") or p:FindFirstChild("team")
     
@@ -438,7 +430,7 @@ local function UpdateESP()
                 local hp, maxHp = GetHealth(p.Character)
                 
                 if Settings.ESP and p.Character and p.Character:FindFirstChild("HumanoidRootPart") and hp > 0 then
-                    -- ⚡ 套用智能隊友識別，如果是隊友就隱藏透視並跳過
+                    
                     if IsTeammate(p) then 
                         drawings.Box.Visible = false
                         drawings.HealthBg.Visible = false
@@ -531,7 +523,7 @@ local function FindNewTarget()
         local hp, _ = GetHealth(p.Character)
         
         if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") and p.Character:FindFirstChild("HumanoidRootPart") and hp > 0 then
-            -- ⚡ 套用智能隊友識別，過濾掉隊友，不鎖定
+            
             if not IsTeammate(p) then
                 local distToPlayer = (Camera.CFrame.Position - p.Character.HumanoidRootPart.Position).Magnitude
                 if distToPlayer <= Settings.MaxDistance then
