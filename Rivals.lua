@@ -1,5 +1,5 @@
 -- ==========================================
--- MUMU PRO (V36) - 隊伍邏輯致命 Bug 修復版
+-- MUMU PRO (V37) - 終極屬性掃描版 (徹底解決隊友誤鎖)
 -- ==========================================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -330,26 +330,77 @@ local function IsVisible(targetChar)
     return true
 end
 
--- ⚡ 嚴格防禦版：隊伍檢查 (修復「所有人都是隊友」的 BUG)
+-- ⚡ 終極防護：全方位 Attributes 掃描機
 local function IsTeammate(p)
     if not Settings.TeamCheck then 
         return false 
     end
     
-    -- 確保隊伍屬性真的存在且不為 nil，才進行判斷
+    if p == LocalPlayer then 
+        return true 
+    end
+    
+    -- 1. 檢查官方 Team
     if p.Team ~= nil and LocalPlayer.Team ~= nil then
         if p.Team == LocalPlayer.Team then 
             return true 
         end
     end
     
-    local myTeamVal = LocalPlayer:FindFirstChild("Team") or LocalPlayer:FindFirstChild("team")
-    local theirTeamVal = p:FindFirstChild("Team") or p:FindFirstChild("team")
+    -- 2. 檢查官方 TeamColor
+    if p.TeamColor ~= nil and LocalPlayer.TeamColor ~= nil then
+        if p.TeamColor == LocalPlayer.TeamColor then 
+            return true 
+        end
+    end
     
-    if myTeamVal and theirTeamVal then
-        if myTeamVal:IsA("StringValue") or myTeamVal:IsA("IntValue") or myTeamVal:IsA("ObjectValue") then
-            if myTeamVal.Value == theirTeamVal.Value then
-                return true
+    -- 3. 檢查 Roblox 新版 Attributes 系統 (玩家身上)
+    local attrNames = {"Team", "team", "TeamColor", "Faction", "GroupID", "Role"}
+    for _, attr in ipairs(attrNames) do
+        local myAttr = LocalPlayer:GetAttribute(attr)
+        local theirAttr = p:GetAttribute(attr)
+        if myAttr ~= nil and theirAttr ~= nil then
+            if myAttr == theirAttr then 
+                return true 
+            end
+        end
+    end
+    
+    -- 4. 檢查自定義 Value 物件 (玩家身上)
+    local valNames = {"Team", "team", "TeamColor", "Faction"}
+    for _, vName in ipairs(valNames) do
+        local myVal = LocalPlayer:FindFirstChild(vName)
+        local theirVal = p:FindFirstChild(vName)
+        if myVal and theirVal then
+            if myVal:IsA("StringValue") or myVal:IsA("IntValue") or myVal:IsA("Color3Value") or myVal:IsA("BrickColorValue") then
+                if myVal.Value == theirVal.Value then 
+                    return true 
+                end
+            end
+        end
+    end
+    
+    -- 5. 檢查 Attributes 與 Value (肉體 Character 身上，很多現代遊戲把隊伍掛在肉體上)
+    if LocalPlayer.Character and p.Character then
+        for _, attr in ipairs(attrNames) do
+            local myCAttr = LocalPlayer.Character:GetAttribute(attr)
+            local theirCAttr = p.Character:GetAttribute(attr)
+            if myCAttr ~= nil and theirCAttr ~= nil then
+                if myCAttr == theirCAttr then 
+                    return true 
+                end
+            end
+        end
+        
+        for _, vName in ipairs(valNames) do
+            local myCVal = LocalPlayer.Character:FindFirstChild(vName)
+            local theirCVal = p.Character:FindFirstChild(vName)
+            if myCVal and theirCVal then
+                if myCVal:IsA("StringValue") or myCVal:IsA("IntValue") or myCVal:IsA("Color3Value") or myCVal:IsA("BrickColorValue") then
+                    if myCVal.Value == theirCVal.Value then 
+                        return true 
+                    end
+                end
             end
         end
     end
