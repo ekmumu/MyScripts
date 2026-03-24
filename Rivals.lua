@@ -1,5 +1,5 @@
 -- ==========================================
--- MUMU PRO (V32) - 引擎崩潰修復 + 完全展開版
+-- MUMU PRO (V34) - 絕對零壓縮純淨展開版
 -- ==========================================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -16,7 +16,9 @@ end
 if _G.MUMU_ESP_DRAWINGS then
     for _, drawings in pairs(_G.MUMU_ESP_DRAWINGS) do
         for _, obj in pairs(drawings) do 
-            pcall(function() obj:Remove() end) 
+            pcall(function() 
+                obj:Remove() 
+            end) 
         end
     end
 end
@@ -25,7 +27,7 @@ _G.MUMU_ESP_DRAWINGS = {}
 local Settings = {
     ESP = true,
     Aimbot = true,        
-    SilentAim = false,    -- ⚡ 子彈拐彎
+    SilentAim = false,    -- ⚡ 子彈拐彎 (安全版)
     TriggerBot = false,   
     TriggerRadius = 15,   
     AutoFire_ADS = false, 
@@ -80,7 +82,7 @@ Container.CanvasSize = UDim2.new(0, 0, 2.3, 0)
 local Layout = Instance.new("UIListLayout", Container)
 Layout.Padding = UDim.new(0, 8)
 
-local function AddToggle(name, settingKey)
+local function AddToggle(name, settingKey, customCallback)
     local btn = Instance.new("TextButton", Container)
     btn.Size = UDim2.new(1, -10, 0, 45)
     btn.BackgroundColor3 = Settings[settingKey] and Color3.fromRGB(200, 0, 0) or Color3.fromRGB(45, 45, 45)
@@ -94,6 +96,9 @@ local function AddToggle(name, settingKey)
         Settings[settingKey] = not Settings[settingKey]
         btn.Text = name .. ": " .. (Settings[settingKey] and "ON" or "OFF")
         btn.BackgroundColor3 = Settings[settingKey] and Color3.fromRGB(200, 0, 0) or Color3.fromRGB(45, 45, 45) 
+        if customCallback then 
+            customCallback(Settings[settingKey]) 
+        end
     end)
 end
 
@@ -157,13 +162,15 @@ local function AddAdjuster(name, settingKey, step, min, max)
     end)
 end
 
--- [[ 2. 飛行控制 ]]
+-- [[ 2. 飛行與穿牆控制 ]]
 local FlyBodyGyro, FlyBodyVelocity
 local CONTROL = {F = 0, B = 0, L = 0, R = 0, UP = 0, DOWN = 0}
 
 local function UpdateFlyState(state)
     local char = LocalPlayer.Character
-    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+    if not char then return end
+    if not char:FindFirstChild("HumanoidRootPart") then return end
+    
     local hrp = char.HumanoidRootPart
     
     if state then
@@ -174,17 +181,41 @@ local function UpdateFlyState(state)
             FlyBodyGyro.maxTorque = Vector3.new(9e9, 9e9, 9e9)
             FlyBodyGyro.cframe = hrp.CFrame 
         end
+        
         if not hrp:FindFirstChild("MUMU_VELOCITY") then 
             FlyBodyVelocity = Instance.new("BodyVelocity", hrp)
             FlyBodyVelocity.Name = "MUMU_VELOCITY"
             FlyBodyVelocity.velocity = Vector3.new(0, 0, 0)
             FlyBodyVelocity.maxForce = Vector3.new(9e9, 9e9, 9e9) 
         end
-        if char:FindFirstChild("Humanoid") then char.Humanoid.PlatformStand = true end
+        
+        if char:FindFirstChild("Humanoid") then 
+            char.Humanoid.PlatformStand = true 
+        end
     else
-        if hrp:FindFirstChild("MUMU_GYRO") then hrp.MUMU_GYRO:Destroy() end
-        if hrp:FindFirstChild("MUMU_VELOCITY") then hrp.MUMU_VELOCITY:Destroy() end
-        if char:FindFirstChild("Humanoid") then char.Humanoid.PlatformStand = false end
+        if hrp:FindFirstChild("MUMU_GYRO") then 
+            hrp.MUMU_GYRO:Destroy() 
+        end
+        
+        if hrp:FindFirstChild("MUMU_VELOCITY") then 
+            hrp.MUMU_VELOCITY:Destroy() 
+        end
+        
+        if char:FindFirstChild("Humanoid") then 
+            char.Humanoid.PlatformStand = false 
+        end
+    end
+end
+
+local function UpdateNoclipState(state)
+    if not state then
+        if LocalPlayer.Character then
+            for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
+                if part:IsA("BasePart") then 
+                    part.CanCollide = true 
+                end
+            end
+        end
     end
 end
 
@@ -197,8 +228,8 @@ AddToggle("自動鎖頭+開火 (開鏡時)", "AutoFire_ADS")
 AddToggle("暴力鎖頭+開火 (不開鏡)", "AutoFire_Hip") 
 AddToggle("不瞄隊友 (Team)", "TeamCheck")
 AddToggle("隔牆不瞄 (Wall)", "WallCheck")
-AddToggle("飛行模式常駐 (Fly)", "Fly") 
-AddToggle("穿牆模式 (Noclip)", "Noclip")           
+AddToggle("飛行模式常駐 (Fly)", "Fly", UpdateFlyState)     
+AddToggle("穿牆模式 (Noclip)", "Noclip", UpdateNoclipState) 
 
 AddAdjuster("鎖頭推力 (太抖請調低)", "AimbotSens", 0.1, 0.1, 2.0)
 AddAdjuster("扳機判定範圍", "TriggerRadius", 5, 5, 100)
@@ -215,86 +246,135 @@ Hint.Font = Enum.Font.Gotham
 Hint.BackgroundTransparency = 1
 
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if not gameProcessed and input.KeyCode == Enum.KeyCode.J then Main.Visible = not Main.Visible end
     if not gameProcessed then
+        if input.KeyCode == Enum.KeyCode.J then 
+            Main.Visible = not Main.Visible 
+        end
+        
         local k = input.KeyCode
-        if k == Enum.KeyCode.W then CONTROL.F = 1 
-        elseif k == Enum.KeyCode.S then CONTROL.B = -1 
-        elseif k == Enum.KeyCode.A then CONTROL.L = -1 
-        elseif k == Enum.KeyCode.D then CONTROL.R = 1 
-        elseif k == Enum.KeyCode.Space then CONTROL.UP = 1 
-        elseif k == Enum.KeyCode.LeftControl then CONTROL.DOWN = -1 
+        if k == Enum.KeyCode.W then 
+            CONTROL.F = 1 
+        elseif k == Enum.KeyCode.S then 
+            CONTROL.B = -1 
+        elseif k == Enum.KeyCode.A then 
+            CONTROL.L = -1 
+        elseif k == Enum.KeyCode.D then 
+            CONTROL.R = 1 
+        elseif k == Enum.KeyCode.Space then 
+            CONTROL.UP = 1 
+        elseif k == Enum.KeyCode.LeftControl then 
+            CONTROL.DOWN = -1 
         end
     end
 end)
 
 UserInputService.InputEnded:Connect(function(input, gameProcessed)
     local k = input.KeyCode
-    if k == Enum.KeyCode.W then CONTROL.F = 0 
-    elseif k == Enum.KeyCode.S then CONTROL.B = 0 
-    elseif k == Enum.KeyCode.A then CONTROL.L = 0 
-    elseif k == Enum.KeyCode.D then CONTROL.R = 0 
-    elseif k == Enum.KeyCode.Space then CONTROL.UP = 0 
-    elseif k == Enum.KeyCode.LeftControl then CONTROL.DOWN = 0 
+    if k == Enum.KeyCode.W then 
+        CONTROL.F = 0 
+    elseif k == Enum.KeyCode.S then 
+        CONTROL.B = 0 
+    elseif k == Enum.KeyCode.A then 
+        CONTROL.L = 0 
+    elseif k == Enum.KeyCode.D then 
+        CONTROL.R = 0 
+    elseif k == Enum.KeyCode.Space then 
+        CONTROL.UP = 0 
+    elseif k == Enum.KeyCode.LeftControl then 
+        CONTROL.DOWN = 0 
     end
 end)
 
--- [[ 3. 工具函數 ]]
 local function IsVisible(targetChar)
-    if not Settings.WallCheck then return true end
-    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("Head") then return true end
+    if not Settings.WallCheck then 
+        return true 
+    end
+    
+    if not LocalPlayer.Character then 
+        return true 
+    end
+    
+    if not LocalPlayer.Character:FindFirstChild("Head") then 
+        return true 
+    end
+    
     local origin = Camera.CFrame.Position
     local targetPos = targetChar.Head.Position
     local rayParams = RaycastParams.new()
     rayParams.FilterType = Enum.RaycastFilterType.Exclude
     rayParams.FilterDescendantsInstances = {LocalPlayer.Character, Camera}
     rayParams.IgnoreWater = true
+    
     local result = workspace:Raycast(origin, targetPos - origin, rayParams)
+    
     if result then 
-        if result.Instance:IsDescendantOf(targetChar) then return true else return false end 
+        if result.Instance:IsDescendantOf(targetChar) then 
+            return true 
+        else 
+            return false 
+        end 
     end
+    
     return true
 end
 
 local function IsTeammate(p)
-    if not Settings.TeamCheck then return false end
-    if p.Team ~= nil and LocalPlayer.Team ~= nil then return p.Team == LocalPlayer.Team end
+    if not Settings.TeamCheck then 
+        return false 
+    end
+    
+    if p.Team ~= nil and LocalPlayer.Team ~= nil then 
+        return p.Team == LocalPlayer.Team 
+    end
+    
     return false
 end
 
--- ⚡ 重寫防崩潰智能血量獲取
 local function GetHealth(char)
-    if not char then return 0, 100 end
+    if not char then 
+        return 0, 100 
+    end
     
     local hp = 0
     local maxHp = 100
     
-    -- 優先拿系統預設
     local hum = char:FindFirstChild("Humanoid")
     if hum then
         hp = tonumber(hum.Health) or 0
         maxHp = tonumber(hum.MaxHealth) or 100
     end
     
-    -- 檢查自定義值 (安全寫法)
     local customHealth = char:FindFirstChild("Health") or char:FindFirstChild("HP")
-    if customHealth and (customHealth:IsA("NumberValue") or customHealth:IsA("IntValue")) then
-        hp = tonumber(customHealth.Value) or hp
+    if customHealth then
+        if customHealth:IsA("NumberValue") or customHealth:IsA("IntValue") then 
+            hp = tonumber(customHealth.Value) or hp 
+        end
     end
     
     local customMaxHealth = char:FindFirstChild("MaxHealth") or char:FindFirstChild("MaxHP")
-    if customMaxHealth and (customMaxHealth:IsA("NumberValue") or customMaxHealth:IsA("IntValue")) then
-        maxHp = tonumber(customMaxHealth.Value) or maxHp
+    if customMaxHealth then
+        if customMaxHealth:IsA("NumberValue") or customMaxHealth:IsA("IntValue") then 
+            maxHp = tonumber(customMaxHealth.Value) or maxHp 
+        end
     end
     
-    if maxHp <= 0 then maxHp = 100 end
+    if maxHp <= 0 then 
+        maxHp = 100 
+    end
+    
     return hp, maxHp
 end
 
 RunService.Stepped:Connect(function()
-    if Settings.Noclip and LocalPlayer.Character then
-        for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
-            if part:IsA("BasePart") and part.CanCollide then part.CanCollide = false end
+    if Settings.Noclip then
+        if LocalPlayer.Character then
+            for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    if part.CanCollide then 
+                        part.CanCollide = false 
+                    end
+                end
+            end
         end
     end
 end)
@@ -311,8 +391,10 @@ local function UpdateESP()
                 _G.MUMU_ESP_DRAWINGS[p].Box.Color = Color3.fromRGB(255, 50, 50)
                 _G.MUMU_ESP_DRAWINGS[p].Box.Thickness = 1.5
                 _G.MUMU_ESP_DRAWINGS[p].Box.Filled = false
+                
                 _G.MUMU_ESP_DRAWINGS[p].HealthBg.Color = Color3.fromRGB(0, 0, 0)
                 _G.MUMU_ESP_DRAWINGS[p].HealthBg.Thickness = 4
+                
                 _G.MUMU_ESP_DRAWINGS[p].HealthBar.Thickness = 2
             end
 
@@ -322,7 +404,9 @@ local function UpdateESP()
                 
                 if Settings.ESP and p.Character and p.Character:FindFirstChild("HumanoidRootPart") and hp > 0 then
                     if IsTeammate(p) then 
-                        drawings.Box.Visible = false; drawings.HealthBg.Visible = false; drawings.HealthBar.Visible = false 
+                        drawings.Box.Visible = false
+                        drawings.HealthBg.Visible = false
+                        drawings.HealthBar.Visible = false 
                         return 
                     end
                     
@@ -337,14 +421,18 @@ local function UpdateESP()
                         if onScreen then
                             local height = math.abs(topPos.Y - bottomPos.Y)
                             local width = height * 0.6
+                            
                             drawings.Box.Size = Vector2.new(width, height)
                             drawings.Box.Position = Vector2.new(centerPos.X - width/2, topPos.Y)
                             drawings.Box.Visible = true
                             
                             local healthPercent = math.clamp(hp / maxHp, 0, 1)
-                            if healthPercent ~= healthPercent then healthPercent = 1 end
+                            if healthPercent ~= healthPercent then 
+                                healthPercent = 1 
+                            end
                             
                             local barX = centerPos.X - width/2 - 6
+                            
                             drawings.HealthBg.From = Vector2.new(barX, bottomPos.Y)
                             drawings.HealthBg.To = Vector2.new(barX, topPos.Y)
                             drawings.HealthBg.Visible = true
@@ -355,17 +443,26 @@ local function UpdateESP()
                             drawings.HealthBar.Color = Color3.fromHSV(healthPercent * 0.3, 1, 1)
                             drawings.HealthBar.Visible = true
                         else 
-                            drawings.Box.Visible = false; drawings.HealthBg.Visible = false; drawings.HealthBar.Visible = false 
+                            drawings.Box.Visible = false
+                            drawings.HealthBg.Visible = false
+                            drawings.HealthBar.Visible = false 
                         end
                     else 
-                        drawings.Box.Visible = false; drawings.HealthBg.Visible = false; drawings.HealthBar.Visible = false 
+                        drawings.Box.Visible = false
+                        drawings.HealthBg.Visible = false
+                        drawings.HealthBar.Visible = false 
                     end
                 else 
-                    drawings.Box.Visible = false; drawings.HealthBg.Visible = false; drawings.HealthBar.Visible = false 
+                    drawings.Box.Visible = false
+                    drawings.HealthBg.Visible = false
+                    drawings.HealthBar.Visible = false 
                 end
             end)
+            
             if not success then 
-                drawings.Box.Visible = false; drawings.HealthBg.Visible = false; drawings.HealthBar.Visible = false 
+                drawings.Box.Visible = false
+                drawings.HealthBg.Visible = false
+                drawings.HealthBar.Visible = false 
             end
         end
     end
@@ -376,7 +473,9 @@ local lastRapidFire = 0
 
 local function FireWeapon()
     if mouse1click then 
-        pcall(function() mouse1click() end) 
+        pcall(function() 
+            mouse1click() 
+        end) 
     else
         local center = Camera.ViewportSize / 2
         task.spawn(function()
@@ -394,17 +493,21 @@ local function FindNewTarget()
     
     for _, p in pairs(Players:GetPlayers()) do
         local hp, _ = GetHealth(p.Character)
+        
         if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") and p.Character:FindFirstChild("HumanoidRootPart") and hp > 0 then
-            if IsTeammate(p) then continue end
-            if (Camera.CFrame.Position - p.Character.HumanoidRootPart.Position).Magnitude > Settings.MaxDistance then continue end
-            if not IsVisible(p.Character) then continue end
-
-            local pos, onScreen = Camera:WorldToViewportPoint(p.Character.Head.Position)
-            if onScreen then
-                local dist = (Vector2.new(pos.X, pos.Y) - screenCenter).Magnitude
-                if dist < maxDist then 
-                    maxDist = dist
-                    target = p.Character 
+            if not IsTeammate(p) then
+                local distToPlayer = (Camera.CFrame.Position - p.Character.HumanoidRootPart.Position).Magnitude
+                if distToPlayer <= Settings.MaxDistance then
+                    if IsVisible(p.Character) then
+                        local pos, onScreen = Camera:WorldToViewportPoint(p.Character.Head.Position)
+                        if onScreen then
+                            local dist = (Vector2.new(pos.X, pos.Y) - screenCenter).Magnitude
+                            if dist < maxDist then 
+                                maxDist = dist
+                                target = p.Character 
+                            end
+                        end
+                    end
                 end
             end
         end
@@ -412,32 +515,24 @@ local function FindNewTarget()
     return target
 end
 
--- ⚡ 防崩潰子彈拐彎 (Silent Aim) 模組
+-- ⚡ 安全版子彈拐彎
 if hookmetamethod then
-    local OldNamecall
-    OldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
-        local method = getnamecallmethod()
-        local args = {...}
-        
-        -- 加入安全判定，防止其它系統發射奇怪射線導致遊戲崩潰
-        if Settings.SilentAim and LockedTarget and LockedTarget:FindFirstChild("Head") then
-            if method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRayWithWhitelist" or method == "FindPartOnRay" then
-                if type(args[1]) == "userdata" and typeof(args[1]) == "Ray" then
-                    local origin = args[1].Origin
-                    local direction = (LockedTarget.Head.Position - origin).Unit * 1000
-                    args[1] = Ray.new(origin, direction)
-                    return OldNamecall(self, unpack(args))
-                end
-            elseif method == "Raycast" then
-                if typeof(args[1]) == "Vector3" then
-                    local origin = args[1]
-                    local direction = (LockedTarget.Head.Position - origin).Unit * 1000
-                    args[2] = direction
-                    return OldNamecall(self, unpack(args))
+    local OldIndex
+    OldIndex = hookmetamethod(game, "__index", function(self, key)
+        if Settings.SilentAim then
+            if _G.LockedTarget then
+                if _G.LockedTarget:FindFirstChild("Head") then
+                    if typeof(self) == "Instance" and self:IsA("Mouse") then
+                        if key == "Hit" then
+                            return _G.LockedTarget.Head.CFrame
+                        elseif key == "Target" then
+                            return _G.LockedTarget.Head
+                        end
+                    end
                 end
             end
         end
-        return OldNamecall(self, ...)
+        return OldIndex(self, key)
     end)
 end
 
@@ -445,21 +540,28 @@ end
 _G.MUMU_PRO_CONNECTION = RunService.RenderStepped:Connect(function()
     UpdateESP()
 
-    if Settings.Fly and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-        local hrp = LocalPlayer.Character.HumanoidRootPart
-        local gyro = hrp:FindFirstChild("MUMU_GYRO")
-        local vel = hrp:FindFirstChild("MUMU_VELOCITY")
-        if gyro and vel then
-            local camCF = Camera.CFrame
-            gyro.cframe = camCF
-            local moveDir = Vector3.new(0, 0, 0)
-            moveDir = moveDir + camCF.LookVector * (CONTROL.F + CONTROL.B)
-            moveDir = moveDir + camCF.RightVector * (CONTROL.L + CONTROL.R)
-            moveDir = moveDir + camCF.UpVector * (CONTROL.UP + CONTROL.DOWN)
-            if moveDir.Magnitude > 0 then 
-                vel.velocity = moveDir.Unit * Settings.FlySpeed 
-            else 
-                vel.velocity = Vector3.new(0, 0, 0) 
+    if Settings.Fly then
+        if LocalPlayer.Character then
+            if LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                local hrp = LocalPlayer.Character.HumanoidRootPart
+                local gyro = hrp:FindFirstChild("MUMU_GYRO")
+                local vel = hrp:FindFirstChild("MUMU_VELOCITY")
+                
+                if gyro and vel then
+                    local camCF = Camera.CFrame
+                    gyro.cframe = camCF
+                    
+                    local moveDir = Vector3.new(0, 0, 0)
+                    moveDir = moveDir + camCF.LookVector * (CONTROL.F + CONTROL.B)
+                    moveDir = moveDir + camCF.RightVector * (CONTROL.L + CONTROL.R)
+                    moveDir = moveDir + camCF.UpVector * (CONTROL.UP + CONTROL.DOWN)
+                    
+                    if moveDir.Magnitude > 0 then 
+                        vel.velocity = moveDir.Unit * Settings.FlySpeed 
+                    else 
+                        vel.velocity = Vector3.new(0, 0, 0) 
+                    end
+                end
             end
         end
     end
@@ -467,13 +569,21 @@ _G.MUMU_PRO_CONNECTION = RunService.RenderStepped:Connect(function()
     local isRightClicking = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
     
     if Settings.Aimbot or Settings.AutoFire_Hip or Settings.AutoFire_ADS or Settings.TriggerBot or Settings.SilentAim then
-        if not LockedTarget then LockedTarget = FindNewTarget() end
+        if not LockedTarget then 
+            LockedTarget = FindNewTarget() 
+        end
+        
+        _G.LockedTarget = LockedTarget 
 
         local hp, _ = GetHealth(LockedTarget)
+        
         if LockedTarget and LockedTarget:FindFirstChild("Head") and LockedTarget:FindFirstChild("HumanoidRootPart") and hp > 0 then
             
-            if (Camera.CFrame.Position - LockedTarget.HumanoidRootPart.Position).Magnitude > Settings.MaxDistance or not IsVisible(LockedTarget) then 
+            local distFromTarget = (Camera.CFrame.Position - LockedTarget.HumanoidRootPart.Position).Magnitude
+            
+            if distFromTarget > Settings.MaxDistance or not IsVisible(LockedTarget) then 
                 LockedTarget = nil
+                _G.LockedTarget = nil
                 return 
             end
 
@@ -487,9 +597,17 @@ _G.MUMU_PRO_CONNECTION = RunService.RenderStepped:Connect(function()
                 local distToCenter = math.sqrt(deltaX^2 + deltaY^2)
 
                 local shouldAim = false
-                if Settings.Aimbot and isRightClicking then shouldAim = true end
-                if Settings.AutoFire_ADS and isRightClicking then shouldAim = true end
-                if Settings.AutoFire_Hip then shouldAim = true end 
+                if Settings.Aimbot and isRightClicking then 
+                    shouldAim = true 
+                end
+                
+                if Settings.AutoFire_ADS and isRightClicking then 
+                    shouldAim = true 
+                end
+                
+                if Settings.AutoFire_Hip then 
+                    shouldAim = true 
+                end 
 
                 if shouldAim then
                     if mousemoverel then 
@@ -498,9 +616,17 @@ _G.MUMU_PRO_CONNECTION = RunService.RenderStepped:Connect(function()
                 end
 
                 local shouldFire = false
-                if Settings.AutoFire_ADS and isRightClicking then shouldFire = true end
-                if Settings.AutoFire_Hip then shouldFire = true end
-                if Settings.TriggerBot and distToCenter <= Settings.TriggerRadius then shouldFire = true end
+                if Settings.AutoFire_ADS and isRightClicking then 
+                    shouldFire = true 
+                end
+                
+                if Settings.AutoFire_Hip then 
+                    shouldFire = true 
+                end
+                
+                if Settings.TriggerBot and distToCenter <= Settings.TriggerRadius then 
+                    shouldFire = true 
+                end
 
                 if shouldFire then
                     if tick() - lastRapidFire > 0.05 then
@@ -509,28 +635,43 @@ _G.MUMU_PRO_CONNECTION = RunService.RenderStepped:Connect(function()
                     end
                 end
             else 
-                LockedTarget = nil 
+                LockedTarget = nil
+                _G.LockedTarget = nil 
             end
         else 
-            LockedTarget = nil 
+            LockedTarget = nil
+            _G.LockedTarget = nil 
         end
     else 
-        LockedTarget = nil 
+        LockedTarget = nil
+        _G.LockedTarget = nil 
     end
 end)
 
 LocalPlayer.CharacterAdded:Connect(function(newChar)
     task.delay(0.5, function() 
-        if Settings.Fly and newChar:FindFirstChild("HumanoidRootPart") then UpdateFlyState(true) end 
+        if Settings.Fly then
+            if newChar:FindFirstChild("HumanoidRootPart") then 
+                UpdateFlyState(true) 
+            end
+        end
     end)
 end)
 
 Players.PlayerRemoving:Connect(function(plr)
-    if _G.MUMU_ESP_DRAWINGS and _G.MUMU_ESP_DRAWINGS[plr] then 
-        _G.MUMU_ESP_DRAWINGS[plr].Box:Remove()
-        _G.MUMU_ESP_DRAWINGS[plr].HealthBg:Remove()
-        _G.MUMU_ESP_DRAWINGS[plr].HealthBar:Remove()
-        _G.MUMU_ESP_DRAWINGS[plr] = nil 
+    if _G.MUMU_ESP_DRAWINGS then
+        if _G.MUMU_ESP_DRAWINGS[plr] then 
+            _G.MUMU_ESP_DRAWINGS[plr].Box:Remove()
+            _G.MUMU_ESP_DRAWINGS[plr].HealthBg:Remove()
+            _G.MUMU_ESP_DRAWINGS[plr].HealthBar:Remove()
+            _G.MUMU_ESP_DRAWINGS[plr] = nil 
+        end
     end
-    if LockedTarget and LockedTarget.Name == plr.Name then LockedTarget = nil end
+    
+    if LockedTarget then
+        if LockedTarget.Name == plr.Name then 
+            LockedTarget = nil
+            _G.LockedTarget = nil 
+        end
+    end
 end)
