@@ -1,6 +1,4 @@
--- ==========================================
--- MUMU PRO (V40) - 專為 Rivals 打造的手動白名單版
--- ==========================================
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -8,7 +6,7 @@ local VirtualInputManager = game:GetService("VirtualInputManager")
 local Camera = workspace.CurrentCamera
 local LocalPlayer = Players.LocalPlayer
 
--- [[ 0. 核心防禦：全局清理系統 ]]
+
 if _G.MUMU_PRO_CONNECTION then 
     _G.MUMU_PRO_CONNECTION:Disconnect() 
 end
@@ -24,7 +22,7 @@ if _G.MUMU_ESP_DRAWINGS then
 end
 _G.MUMU_ESP_DRAWINGS = {}
 
--- ⚡ 專屬隊友白名單庫
+
 local WhitelistedPlayers = {}
 
 local Settings = {
@@ -44,7 +42,7 @@ local Settings = {
     AimbotSens = 0.5   
 }
 
--- [[ 1. UI 介面建立 ]]
+
 local SafeGui = (gethui and gethui()) or game:GetService("CoreGui")
 if SafeGui:FindFirstChild("MUMU_PHYSICS_LOCK") then 
     SafeGui.MUMU_PHYSICS_LOCK:Destroy() 
@@ -177,7 +175,7 @@ local function AddAdjuster(name, settingKey, step, min, max)
     end)
 end
 
--- [[ 2. 飛行與穿牆控制 ]]
+
 local FlyBodyGyro, FlyBodyVelocity
 local CONTROL = {F = 0, B = 0, L = 0, R = 0, UP = 0, DOWN = 0}
 
@@ -234,7 +232,7 @@ local function UpdateNoclipState(state)
     end
 end
 
--- UI 生成
+
 AddToggle("方框與血條 (ESP)", "ESP")
 AddToggle("實體滑鼠鎖頭 (右鍵瞄準)", "Aimbot") 
 AddToggle("純扳機 (指到敵人自動開火)", "TriggerBot") 
@@ -258,14 +256,14 @@ Hint.TextSize = 13
 Hint.Font = Enum.Font.GothamBold
 Hint.BackgroundTransparency = 1
 
--- ⚡ 準心白名單標記系統
+
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if not gameProcessed then
         if input.KeyCode == Enum.KeyCode.J then 
             Main.Visible = not Main.Visible 
         end
         
-        -- 按下 T 鍵 或 滑鼠中鍵 來標記/取消隊友
+       
         if input.KeyCode == Enum.KeyCode.T or input.UserInputType == Enum.UserInputType.MouseButton3 then
             local closestPlr = nil
             local maxD = Settings.FOV
@@ -295,7 +293,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
                     Hint.TextColor3 = Color3.fromRGB(50, 255, 50)
                 end
                 
-                -- 2秒後恢復預設提示
+                
                 task.delay(2, function() 
                     Hint.Text = "按 [J] 隱藏面板 | 準心對準隊友按 [T] 加白名單" 
                     Hint.TextColor3 = Color3.fromRGB(0, 255, 100)
@@ -370,7 +368,7 @@ local function IsVisible(targetChar)
     return true
 end
 
--- ⚡ 判斷是否為「手動標記的隊友」
+
 local function IsTeammate(p)
     if p == LocalPlayer then 
         return true 
@@ -457,7 +455,7 @@ local function UpdateESP()
                 
                 if Settings.ESP and p.Character and p.Character:FindFirstChild("HumanoidRootPart") and hp > 0 then
                     
-                    -- 如果是白名單隊友，直接隱藏透視框
+                   
                     if IsTeammate(p) then 
                         drawings.Box.Visible = false
                         drawings.HealthBg.Visible = false
@@ -551,7 +549,7 @@ local function FindNewTarget()
         
         if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") and p.Character:FindFirstChild("HumanoidRootPart") and hp > 0 then
             
-            -- 過濾掉白名單內的隊友
+          
             if not IsTeammate(p) then
                 local distToPlayer = (Camera.CFrame.Position - p.Character.HumanoidRootPart.Position).Magnitude
                 if distToPlayer <= Settings.MaxDistance then
@@ -572,7 +570,7 @@ local function FindNewTarget()
     return target
 end
 
--- [[ 4. 戰鬥核心引擎 ]]
+
 _G.MUMU_PRO_CONNECTION = RunService.RenderStepped:Connect(function()
     UpdateESP()
 
@@ -698,7 +696,7 @@ Players.PlayerRemoving:Connect(function(plr)
         end
     end
     
-    -- 清理離線玩家的白名單
+  
     if WhitelistedPlayers[plr.UserId] then
         WhitelistedPlayers[plr.UserId] = nil
     end
