@@ -1,5 +1,5 @@
 -- ==========================================
--- MUMU PRO (V40) - 專為 Rivals 打造的手動白名單版
+-- MUMU PRO (V41) - 手動白名單 + 安全子彈拐彎
 -- ==========================================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -30,6 +30,7 @@ local WhitelistedPlayers = {}
 local Settings = {
     ESP = true,
     Aimbot = true,        
+    SilentAim = false,    -- ⚡ 子彈拐彎開關
     TriggerBot = false,   
     TriggerRadius = 15,   
     AutoFire_ADS = false, 
@@ -55,7 +56,7 @@ ScreenGui.Name = "MUMU_PHYSICS_LOCK"
 ScreenGui.ResetOnSpawn = false
 
 local Main = Instance.new("Frame", ScreenGui)
-Main.Size = UDim2.fromOffset(350, 680) 
+Main.Size = UDim2.fromOffset(350, 720) 
 Main.Position = UDim2.fromScale(0.5, 0.5)
 Main.AnchorPoint = Vector2.new(0.5, 0.5)
 Main.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
@@ -78,7 +79,7 @@ Container.Size = UDim2.new(0.9, 0, 1, -100)
 Container.Position = UDim2.fromScale(0.05, 0.12)
 Container.BackgroundTransparency = 1
 Container.ScrollBarThickness = 2
-Container.CanvasSize = UDim2.new(0, 0, 2.1, 0) 
+Container.CanvasSize = UDim2.new(0, 0, 2.3, 0) 
 
 local Layout = Instance.new("UIListLayout", Container)
 Layout.Padding = UDim.new(0, 8)
@@ -236,6 +237,7 @@ end
 
 -- UI 生成
 AddToggle("方框與血條 (ESP)", "ESP")
+AddToggle("子彈拐彎 (Silent Aim)", "SilentAim") 
 AddToggle("實體滑鼠鎖頭 (右鍵瞄準)", "Aimbot") 
 AddToggle("純扳機 (指到敵人自動開火)", "TriggerBot") 
 AddToggle("自動鎖頭+開火 (開鏡時)", "AutoFire_ADS") 
@@ -252,7 +254,7 @@ AddAdjuster("FOV 鎖定範圍", "FOV", 25, 50, 800)
 local Hint = Instance.new("TextLabel", Main)
 Hint.Size = UDim2.new(1, 0, 0, 35)
 Hint.Position = UDim2.new(0, 0, 1, -35)
-Hint.Text = "按 [J] 隱藏面板 | 準心對準隊友按 [T] 加白名單"
+Hint.Text = "按 [J] 隱藏 | 準心對準隊友按 [T] 加白名單"
 Hint.TextColor3 = Color3.fromRGB(0, 255, 100)
 Hint.TextSize = 13
 Hint.Font = Enum.Font.GothamBold
@@ -265,7 +267,6 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
             Main.Visible = not Main.Visible 
         end
         
-        -- 按下 T 鍵 或 滑鼠中鍵 來標記/取消隊友
         if input.KeyCode == Enum.KeyCode.T or input.UserInputType == Enum.UserInputType.MouseButton3 then
             local closestPlr = nil
             local maxD = Settings.FOV
@@ -295,9 +296,8 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
                     Hint.TextColor3 = Color3.fromRGB(50, 255, 50)
                 end
                 
-                -- 2秒後恢復預設提示
                 task.delay(2, function() 
-                    Hint.Text = "按 [J] 隱藏面板 | 準心對準隊友按 [T] 加白名單" 
+                    Hint.Text = "按 [J] 隱藏 | 準心對準隊友按 [T] 加白名單" 
                     Hint.TextColor3 = Color3.fromRGB(0, 255, 100)
                 end)
             end
@@ -370,7 +370,6 @@ local function IsVisible(targetChar)
     return true
 end
 
--- ⚡ 判斷是否為「手動標記的隊友」
 local function IsTeammate(p)
     if p == LocalPlayer then 
         return true 
@@ -418,6 +417,55 @@ local function GetHealth(char)
     return hp, maxHp
 end
 
+-- ⚡ 終極安全子彈拐彎 (劫持射線與滑鼠，且嚴格限制只在開火時運作)
+if hookmetamethod then
+    local OldNamecall
+    OldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
+        local method = getnamecallmethod()
+        local args = {...}
+        
+        -- 防止干擾執行器，並確認目標存在
+        if not checkcaller() and Settings.SilentAim and _G.LockedTarget and _G.LockedTarget:FindFirstChild("Head") then
+            -- 只有按下左鍵(真正開火時)才劫持，避免干擾人物走路或視角碰撞
+            if UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
+                if method == "Raycast" and self == workspace then
+                    local origin = args[1]
+                    local direction = args[2]
+                    local targetPos = _G.LockedTarget.Head.Position
+                    local newDir = (targetPos - origin).Unit * (direction.Magnitude > 0 and direction.Magnitude or 1000)
+                    args[2] = newDir
+                    return OldNamecall(self, unpack(args))
+                elseif method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRayWithWhitelist" or method == "FindPartOnRay" then
+                    local ray = args[1]
+                    if typeof(ray) == "Ray" then
+                        local origin = ray.Origin
+                        local targetPos = _G.LockedTarget.Head.Position
+                        args[1] = Ray.new(origin, (targetPos - origin).Unit * 1000)
+                        return OldNamecall(self, unpack(args))
+                    end
+                end
+            end
+        end
+        return OldNamecall(self, ...)
+    end)
+    
+    local OldIndex
+    OldIndex = hookmetamethod(game, "__index", function(self, key)
+        if not checkcaller() and Settings.SilentAim and _G.LockedTarget and _G.LockedTarget:FindFirstChild("Head") then
+            if UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
+                if typeof(self) == "Instance" and self:IsA("Mouse") then
+                    if key == "Hit" then
+                        return _G.LockedTarget.Head.CFrame
+                    elseif key == "Target" then
+                        return _G.LockedTarget.Head
+                    end
+                end
+            end
+        end
+        return OldIndex(self, key)
+    end)
+end
+
 RunService.Stepped:Connect(function()
     if Settings.Noclip then
         if LocalPlayer.Character then
@@ -457,7 +505,6 @@ local function UpdateESP()
                 
                 if Settings.ESP and p.Character and p.Character:FindFirstChild("HumanoidRootPart") and hp > 0 then
                     
-                    -- 如果是白名單隊友，直接隱藏透視框
                     if IsTeammate(p) then 
                         drawings.Box.Visible = false
                         drawings.HealthBg.Visible = false
@@ -551,7 +598,6 @@ local function FindNewTarget()
         
         if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") and p.Character:FindFirstChild("HumanoidRootPart") and hp > 0 then
             
-            -- 過濾掉白名單內的隊友
             if not IsTeammate(p) then
                 local distToPlayer = (Camera.CFrame.Position - p.Character.HumanoidRootPart.Position).Magnitude
                 if distToPlayer <= Settings.MaxDistance then
@@ -604,10 +650,12 @@ _G.MUMU_PRO_CONNECTION = RunService.RenderStepped:Connect(function()
 
     local isRightClicking = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
     
-    if Settings.Aimbot or Settings.AutoFire_Hip or Settings.AutoFire_ADS or Settings.TriggerBot then
+    if Settings.Aimbot or Settings.AutoFire_Hip or Settings.AutoFire_ADS or Settings.TriggerBot or Settings.SilentAim then
         if not LockedTarget then 
             LockedTarget = FindNewTarget() 
         end
+        
+        _G.LockedTarget = LockedTarget -- 將目標存入全域供子彈拐彎讀取
 
         local hp, _ = GetHealth(LockedTarget)
         
@@ -617,6 +665,7 @@ _G.MUMU_PRO_CONNECTION = RunService.RenderStepped:Connect(function()
             
             if distFromTarget > Settings.MaxDistance or not IsVisible(LockedTarget) then 
                 LockedTarget = nil
+                _G.LockedTarget = nil
                 return 
             end
 
@@ -669,12 +718,15 @@ _G.MUMU_PRO_CONNECTION = RunService.RenderStepped:Connect(function()
                 end
             else 
                 LockedTarget = nil
+                _G.LockedTarget = nil
             end
         else 
             LockedTarget = nil
+            _G.LockedTarget = nil
         end
     else 
         LockedTarget = nil
+        _G.LockedTarget = nil
     end
 end)
 
@@ -698,7 +750,6 @@ Players.PlayerRemoving:Connect(function(plr)
         end
     end
     
-    -- 清理離線玩家的白名單
     if WhitelistedPlayers[plr.UserId] then
         WhitelistedPlayers[plr.UserId] = nil
     end
@@ -706,6 +757,7 @@ Players.PlayerRemoving:Connect(function(plr)
     if LockedTarget then
         if LockedTarget.Name == plr.Name then 
             LockedTarget = nil
+            _G.LockedTarget = nil
         end
     end
 end)
