@@ -1,5 +1,5 @@
 -- ==========================================
--- MUMU PRO (V41) - 手動白名單 + 安全子彈拐彎
+-- MUMU PRO (V42) - 智能長度過濾拐彎版 (專攻 Rivals)
 -- ==========================================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -417,30 +417,33 @@ local function GetHealth(char)
     return hp, maxHp
 end
 
--- ⚡ 終極安全子彈拐彎 (劫持射線與滑鼠，且嚴格限制只在開火時運作)
+-- ⚡ 智能子彈拐彎 (拔除左鍵限制，改用射線長度過濾)
 if hookmetamethod then
     local OldNamecall
     OldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
         local method = getnamecallmethod()
         local args = {...}
         
-        -- 防止干擾執行器，並確認目標存在
-        if not checkcaller() and Settings.SilentAim and _G.LockedTarget and _G.LockedTarget:FindFirstChild("Head") then
-            -- 只有按下左鍵(真正開火時)才劫持，避免干擾人物走路或視角碰撞
-            if UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
+        if not checkcaller() and Settings.SilentAim then
+            if _G.LockedTarget and _G.LockedTarget:FindFirstChild("Head") then
                 if method == "Raycast" and self == workspace then
                     local origin = args[1]
                     local direction = args[2]
-                    local targetPos = _G.LockedTarget.Head.Position
-                    local newDir = (targetPos - origin).Unit * (direction.Magnitude > 0 and direction.Magnitude or 1000)
-                    args[2] = newDir
-                    return OldNamecall(self, unpack(args))
+                    
+                    -- 判斷這是不是子彈射線 (長度大於 20 通常是子彈或準心射線，忽略腳底碰撞等短射線)
+                    if direction and typeof(direction) == "Vector3" and direction.Magnitude > 20 then
+                        local targetPos = _G.LockedTarget.Head.Position
+                        local newDir = (targetPos - origin).Unit * direction.Magnitude
+                        args[2] = newDir
+                        return OldNamecall(self, unpack(args))
+                    end
+                    
                 elseif method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRayWithWhitelist" or method == "FindPartOnRay" then
                     local ray = args[1]
-                    if typeof(ray) == "Ray" then
+                    if typeof(ray) == "Ray" and ray.Direction.Magnitude > 20 then
                         local origin = ray.Origin
                         local targetPos = _G.LockedTarget.Head.Position
-                        args[1] = Ray.new(origin, (targetPos - origin).Unit * 1000)
+                        args[1] = Ray.new(origin, (targetPos - origin).Unit * ray.Direction.Magnitude)
                         return OldNamecall(self, unpack(args))
                     end
                 end
@@ -451,8 +454,8 @@ if hookmetamethod then
     
     local OldIndex
     OldIndex = hookmetamethod(game, "__index", function(self, key)
-        if not checkcaller() and Settings.SilentAim and _G.LockedTarget and _G.LockedTarget:FindFirstChild("Head") then
-            if UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
+        if not checkcaller() and Settings.SilentAim then
+            if _G.LockedTarget and _G.LockedTarget:FindFirstChild("Head") then
                 if typeof(self) == "Instance" and self:IsA("Mouse") then
                     if key == "Hit" then
                         return _G.LockedTarget.Head.CFrame
@@ -655,7 +658,7 @@ _G.MUMU_PRO_CONNECTION = RunService.RenderStepped:Connect(function()
             LockedTarget = FindNewTarget() 
         end
         
-        _G.LockedTarget = LockedTarget -- 將目標存入全域供子彈拐彎讀取
+        _G.LockedTarget = LockedTarget 
 
         local hp, _ = GetHealth(LockedTarget)
         
