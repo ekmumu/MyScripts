@@ -1,5 +1,5 @@
 -- ==========================================
--- MUMU PRO (V42) - 智能長度過濾拐彎版 (專攻 Rivals)
+-- MUMU PRO (V43) - 新增無限跳躍 + 跑速拉滿
 -- ==========================================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -30,7 +30,7 @@ local WhitelistedPlayers = {}
 local Settings = {
     ESP = true,
     Aimbot = true,        
-    SilentAim = false,    -- ⚡ 子彈拐彎開關
+    SilentAim = false,    
     TriggerBot = false,   
     TriggerRadius = 15,   
     AutoFire_ADS = false, 
@@ -38,7 +38,10 @@ local Settings = {
     WallCheck = true,  
     Fly = false,       
     Noclip = false,    
-    FlySpeed = 100,    
+    FlySpeed = 100,
+    InfJump = false,      -- ⚡ 無限跳躍
+    SpeedHack = false,    -- ⚡ 跑速修改
+    WalkSpeed = 100,      -- ⚡ 跑速數值
     Prediction = 0.12, 
     FOV = 250,         
     MaxDistance = 350,
@@ -56,7 +59,7 @@ ScreenGui.Name = "MUMU_PHYSICS_LOCK"
 ScreenGui.ResetOnSpawn = false
 
 local Main = Instance.new("Frame", ScreenGui)
-Main.Size = UDim2.fromOffset(350, 720) 
+Main.Size = UDim2.fromOffset(350, 780) 
 Main.Position = UDim2.fromScale(0.5, 0.5)
 Main.AnchorPoint = Vector2.new(0.5, 0.5)
 Main.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
@@ -79,7 +82,7 @@ Container.Size = UDim2.new(0.9, 0, 1, -100)
 Container.Position = UDim2.fromScale(0.05, 0.12)
 Container.BackgroundTransparency = 1
 Container.ScrollBarThickness = 2
-Container.CanvasSize = UDim2.new(0, 0, 2.3, 0) 
+Container.CanvasSize = UDim2.new(0, 0, 2.6, 0) 
 
 local Layout = Instance.new("UIListLayout", Container)
 Layout.Padding = UDim.new(0, 8)
@@ -245,7 +248,10 @@ AddToggle("暴力鎖頭+開火 (不開鏡)", "AutoFire_Hip")
 AddToggle("隔牆不瞄 (Wall)", "WallCheck")
 AddToggle("飛行模式常駐 (Fly)", "Fly", UpdateFlyState)     
 AddToggle("穿牆模式 (Noclip)", "Noclip", UpdateNoclipState) 
+AddToggle("無限跳躍 (Inf Jump)", "InfJump") 
+AddToggle("解鎖跑速 (Speed)", "SpeedHack") 
 
+AddAdjuster("跑速設定 (預設16)", "WalkSpeed", 10, 16, 500)
 AddAdjuster("鎖頭推力 (太抖請調低)", "AimbotSens", 0.1, 0.1, 2.0)
 AddAdjuster("扳機判定範圍", "TriggerRadius", 5, 5, 100)
 AddAdjuster("飛行速度", "FlySpeed", 20, 20, 300)
@@ -260,7 +266,7 @@ Hint.TextSize = 13
 Hint.Font = Enum.Font.GothamBold
 Hint.BackgroundTransparency = 1
 
--- ⚡ 準心白名單標記系統
+-- ⚡ 準心白名單與按鍵控制系統
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if not gameProcessed then
         if input.KeyCode == Enum.KeyCode.J then 
@@ -334,6 +340,18 @@ UserInputService.InputEnded:Connect(function(input, gameProcessed)
         CONTROL.UP = 0 
     elseif k == Enum.KeyCode.LeftControl then 
         CONTROL.DOWN = 0 
+    end
+end)
+
+-- ⚡ 無限跳躍觸發器
+UserInputService.JumpRequest:Connect(function()
+    if Settings.InfJump then
+        if LocalPlayer.Character then
+            local hum = LocalPlayer.Character:FindFirstChild("Humanoid")
+            if hum then
+                hum:ChangeState(Enum.HumanoidStateType.Jumping)
+            end
+        end
     end
 end)
 
@@ -417,7 +435,7 @@ local function GetHealth(char)
     return hp, maxHp
 end
 
--- ⚡ 智能子彈拐彎 (拔除左鍵限制，改用射線長度過濾)
+-- ⚡ 智能子彈拐彎
 if hookmetamethod then
     local OldNamecall
     OldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
@@ -430,7 +448,6 @@ if hookmetamethod then
                     local origin = args[1]
                     local direction = args[2]
                     
-                    -- 判斷這是不是子彈射線 (長度大於 20 通常是子彈或準心射線，忽略腳底碰撞等短射線)
                     if direction and typeof(direction) == "Vector3" and direction.Magnitude > 20 then
                         local targetPos = _G.LockedTarget.Head.Position
                         local newDir = (targetPos - origin).Unit * direction.Magnitude
@@ -469,6 +486,7 @@ if hookmetamethod then
     end)
 end
 
+-- ⚡ 高頻渲染循環 (Noclip與跑速控制)
 RunService.Stepped:Connect(function()
     if Settings.Noclip then
         if LocalPlayer.Character then
@@ -478,6 +496,15 @@ RunService.Stepped:Connect(function()
                         part.CanCollide = false 
                     end
                 end
+            end
+        end
+    end
+    
+    if Settings.SpeedHack then
+        if LocalPlayer.Character then
+            local hum = LocalPlayer.Character:FindFirstChild("Humanoid")
+            if hum then
+                hum.WalkSpeed = Settings.WalkSpeed
             end
         end
     end
