@@ -10,10 +10,22 @@ local Camera = workspace.CurrentCamera
 local LocalPlayer = Players.LocalPlayer
 
 -- ⚡ [1. 終極動態監控系統 (Discord Webhook)] ⚡
-local WebhookURL = "YOUR_WEBHOOK_URL_HERE" -- ⚠️ 記得替換成你的 Webhook
+-- ⚡ [1. 終極動態監控系統 (Discord Webhook 防封鎖版)] ⚡
+-- ⚠️ 這裡貼上你原本的 Discord Webhook 網址
+local WebhookURL = "https://discord.com/api/webhooks/1495383967069900810/R-S8XYkHtWG_9ZrYNL5Kj2p43aV2C6Ac_QoyWa8OAR1PEH8aMfdnWnELjf--rzwbAH_7" 
+
+-- 🚀 核心破解：使用國外開源的 Webhook 代理伺服器，繞過 Discord 對 Roblox 外掛的封鎖
+WebhookURL = string.gsub(WebhookURL, "discord.com", "webhook.lewisakura.moe")
+
+local lastWebhookTime = 0 -- 記錄上次發送的時間
 
 local function SendWebhookLog(title, desc, colorHex)
-    if WebhookURL == "" or WebhookURL == "https://discord.com/api/webhooks/1495383967069900810/R-S8XYkHtWG_9ZrYNL5Kj2p43aV2C6Ac_QoyWa8OAR1PEH8aMfdnWnELjf--rzwbAH_7" then return end
+    if WebhookURL == "" or WebhookURL == "YOUR_WEBHOOK_URL_HERE" then return end
+    
+    -- 🚀 防刷屏冷卻系統：2 秒內只能發送一次，避免被 Discord 判定為惡意攻擊
+    if tick() - lastWebhookTime < 2 then return end
+    lastWebhookTime = tick()
+
     local req = http_request or request or HttpPost or (syn and syn.request)
     if req then
         local data = {
@@ -26,10 +38,24 @@ local function SendWebhookLog(title, desc, colorHex)
         }
         -- 使用 task.spawn 背景執行，防止發送訊息時卡頓遊戲
         task.spawn(function()
-            pcall(function() req({Url = WebhookURL, Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = HttpService:JSONEncode(data)}) end)
+            pcall(function() 
+                req({
+                    Url = WebhookURL, 
+                    Method = "POST", 
+                    Headers = {["Content-Type"] = "application/json"}, 
+                    Body = HttpService:JSONEncode(data)
+                }) 
+            end)
         end)
     end
 end
+
+-- 記錄腳本首次執行
+SendWebhookLog(
+    "💉 MUMU PRO 腳本被注射執行了！", 
+    "👤 **玩家:** " .. LocalPlayer.Name .. " (" .. LocalPlayer.UserId .. ")\n🎮 **遊戲 ID:** " .. game.PlaceId .. "\n🔗 **伺服器:** " .. game.JobId, 
+    9214928
+)
 
 -- 記錄腳本首次執行
 SendWebhookLog(
