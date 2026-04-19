@@ -1,665 +1,265 @@
 -- ==========================================
--- MUMU PRO (V47) - 終極開源反擊版 (FPS補償 + 完美血條)
+-- MUMU PRO (V48) - 封神介面版 (完整單行展開)
 -- ==========================================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
-local Stats = game:GetService("Stats")
 local Camera = workspace.CurrentCamera
 local LocalPlayer = Players.LocalPlayer
 
--- [[ 0. 核心防禦：全局清理系統 ]]
-if _G.MUMU_PRO_CONNECTION then 
-    _G.MUMU_PRO_CONNECTION:Disconnect() 
-end
-if _G.MUMU_FPS_CONNECTION then
-    _G.MUMU_FPS_CONNECTION:Disconnect()
-end
-
-if _G.MUMU_ESP_DRAWINGS then
-    for _, drawings in pairs(_G.MUMU_ESP_DRAWINGS) do
-        for _, obj in pairs(drawings) do 
-            pcall(function() 
-                obj:Remove() 
-            end) 
-        end
-    end
-end
+if _G.MUMU_PRO_CONNECTION then _G.MUMU_PRO_CONNECTION:Disconnect() end
+if _G.MUMU_FPS_CONNECTION then _G.MUMU_FPS_CONNECTION:Disconnect() end
+if _G.MUMU_ESP_DRAWINGS then for _, d in pairs(_G.MUMU_ESP_DRAWINGS) do pcall(function() d.Box:Remove(); d.HealthBg:Remove(); d.HealthBar:Remove() end) end end
 _G.MUMU_ESP_DRAWINGS = {}
 
--- ⚡ 幀數 (FPS / DeltaTime) 全局變數
 _G.CurrentDeltaTime = 1/60 
+_G.MUMU_FPS_CONNECTION = RunService.RenderStepped:Connect(function(dt) _G.CurrentDeltaTime = dt end)
 
-_G.MUMU_FPS_CONNECTION = RunService.RenderStepped:Connect(function(deltaTime)
-    _G.CurrentDeltaTime = deltaTime
-end)
-
--- ⚡ 專屬隊友白名單庫
 local WhitelistedPlayers = {}
-
 local Settings = {
-    ESP = true,
-    Aimbot = true,        
-    SilentAim = false,    
-    TriggerBot = false,   
-    TriggerRadius = 15,   
-    AutoFire_ADS = false, 
-    AutoFire_Hip = false, 
-    WallCheck = true,  
-    Fly = false,       
-    Noclip = false,    
-    FlySpeed = 100,
-    InfJump = false,      
-    SpeedHack = false,    
-    WalkSpeed = 100,      
-    
-    -- ⚡ 高級動態物理預判參數 (加入 FPS 補償)
-    UseDynamicPred = true,
-    BulletSpeed = 2000,   
-    PingComp = 0.05,      
-    StaticPred = 0.15,    
-    
-    FOV = 250,         
-    MaxDistance = 500,    
-    AimbotSens = 1.0      
+    ESP = true, TeamESP = true, ConstantBox = true, HealthBar = true,
+    Aimbot = false, SilentAim = false, TriggerBot = false, AutoFireADS = false,
+    WallCheck = true, Fly = false, FlySpeed = 100, Noclip = false, InfJump = false, SpeedHack = false, WalkSpeed = 100,
+    UseDynamicPred = true, BulletSpeed = 2000, PingComp = 0.05, StaticPred = 0.15,
+    FOV = 250, MaxDistance = 500, AimbotSens = 1.0, RageAutoClick = false
 }
 
--- [[ 1. UI 介面建立 (完整展開版) ]]
-local SafeGui = (gethui and gethui()) or game:GetService("CoreGui")
-if SafeGui:FindFirstChild("MUMU_PHYSICS_LOCK") then 
-    SafeGui.MUMU_PHYSICS_LOCK:Destroy() 
-end
-
-local ScreenGui = Instance.new("ScreenGui", SafeGui)
-ScreenGui.Name = "MUMU_PHYSICS_LOCK"
-ScreenGui.ResetOnSpawn = false
-
-local Main = Instance.new("Frame", ScreenGui)
-Main.Size = UDim2.fromOffset(360, 780) 
-Main.Position = UDim2.fromScale(0.5, 0.5)
-Main.AnchorPoint = Vector2.new(0.5, 0.5)
-Main.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 10)
-
-local stroke = Instance.new("UIStroke", Main)
-stroke.Thickness = 3
-stroke.Color = Color3.fromRGB(255, 0, 0)
-
-local Title = Instance.new("TextLabel", Main)
-Title.Size = UDim2.new(1, 0, 0, 60)
-Title.Text = "⚡ MUMU PRO [V47]"
-Title.TextSize = 25
-Title.Font = Enum.Font.GothamBlack
-Title.TextColor3 = Color3.new(1, 1, 1)
-Title.BackgroundTransparency = 1
-
-local Container = Instance.new("ScrollingFrame", Main)
-Container.Size = UDim2.new(0.9, 0, 1, -100)
-Container.Position = UDim2.fromScale(0.05, 0.12)
-Container.BackgroundTransparency = 1
-Container.ScrollBarThickness = 3
-Container.ScrollBarImageColor3 = Color3.fromRGB(255, 0, 0)
-Container.CanvasSize = UDim2.new(0, 0, 3.2, 0) 
-
-local Layout = Instance.new("UIListLayout", Container)
-Layout.Padding = UDim.new(0, 8)
-Layout.SortOrder = Enum.SortOrder.LayoutOrder
-
-local function AddToggle(name, settingKey, customCallback)
-    local btn = Instance.new("TextButton", Container)
-    btn.Size = UDim2.new(1, -10, 0, 45)
-    
-    if Settings[settingKey] then
-        btn.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
-        btn.Text = name .. " [ON]"
-    else
-        btn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-        btn.Text = name .. " [OFF]"
-    end
-    
-    btn.TextSize = 14
-    btn.Font = Enum.Font.GothamBold
-    btn.TextColor3 = Color3.new(1, 1, 1)
-    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
-    
-    btn.MouseButton1Click:Connect(function() 
-        Settings[settingKey] = not Settings[settingKey]
-        if Settings[settingKey] then
-            btn.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
-            btn.Text = name .. " [ON]"
-        else
-            btn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-            btn.Text = name .. " [OFF]"
-        end
-        if customCallback then customCallback(Settings[settingKey]) end
-    end)
-end
-
-local function AddAdjuster(name, settingKey, step, min, max)
-    local frame = Instance.new("Frame", Container)
-    frame.Size = UDim2.new(1, -10, 0, 45)
-    frame.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-    Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 6)
-    
-    local title = Instance.new("TextLabel", frame)
-    title.Size = UDim2.new(0.55, 0, 1, 0)
-    title.Position = UDim2.new(0.05, 0, 0, 0)
-    title.Text = name
-    title.TextColor3 = Color3.new(1, 1, 1)
-    title.Font = Enum.Font.GothamBold
-    title.TextSize = 12
-    title.TextXAlignment = Enum.TextXAlignment.Left
-    title.BackgroundTransparency = 1
-    
-    local valText = Instance.new("TextLabel", frame)
-    valText.Size = UDim2.new(0.2, 0, 1, 0)
-    valText.Position = UDim2.new(0.65, 0, 0, 0)
-    valText.Text = string.format(step == math.floor(step) and "%d" or "%.2f", Settings[settingKey])
-    valText.TextColor3 = Color3.new(1, 1, 1)
-    valText.Font = Enum.Font.GothamBold
-    valText.TextSize = 14
-    valText.BackgroundTransparency = 1
-    
-    local btnMinus = Instance.new("TextButton", frame)
-    btnMinus.Size = UDim2.new(0, 30, 0, 30)
-    btnMinus.Position = UDim2.new(0.55, 0, 0.5, -15)
-    btnMinus.BackgroundColor3 = Color3.fromRGB(80, 20, 20)
-    btnMinus.Text = "-"
-    btnMinus.TextColor3 = Color3.new(1, 1, 1)
-    btnMinus.Font = Enum.Font.GothamBold
-    btnMinus.TextSize = 20
-    Instance.new("UICorner", btnMinus).CornerRadius = UDim.new(0, 6)
-    
-    local btnPlus = Instance.new("TextButton", frame)
-    btnPlus.Size = UDim2.new(0, 30, 0, 30)
-    btnPlus.Position = UDim2.new(0.85, 0, 0.5, -15)
-    btnPlus.BackgroundColor3 = Color3.fromRGB(20, 80, 20)
-    btnPlus.Text = "+"
-    btnPlus.TextColor3 = Color3.new(1, 1, 1)
-    btnPlus.Font = Enum.Font.GothamBold
-    btnPlus.TextSize = 20
-    Instance.new("UICorner", btnPlus).CornerRadius = UDim.new(0, 6)
-    
-    btnMinus.MouseButton1Click:Connect(function() 
-        if Settings[settingKey] - step >= min then 
-            Settings[settingKey] = Settings[settingKey] - step
-            Settings[settingKey] = math.floor(Settings[settingKey] * 1000 + 0.5) / 1000
-            valText.Text = string.format(step == math.floor(step) and "%d" or "%.2f", Settings[settingKey])
-        end 
-    end)
-    
-    btnPlus.MouseButton1Click:Connect(function() 
-        if Settings[settingKey] + step <= max then 
-            Settings[settingKey] = Settings[settingKey] + step
-            Settings[settingKey] = math.floor(Settings[settingKey] * 1000 + 0.5) / 1000
-            valText.Text = string.format(step == math.floor(step) and "%d" or "%.2f", Settings[settingKey])
-        end 
-    end)
-end
-
--- [[ 2. 飛行與穿牆控制 ]]
-local FlyBodyGyro, FlyBodyVelocity
-local CONTROL = {F = 0, B = 0, L = 0, R = 0, UP = 0, DOWN = 0}
-
-local function UpdateFlyState(state)
-    local char = LocalPlayer.Character
-    if not char then return end
-    if not char:FindFirstChild("HumanoidRootPart") then return end
-    local hrp = char.HumanoidRootPart
-    
-    if state then
-        if not hrp:FindFirstChild("MUMU_GYRO") then 
-            FlyBodyGyro = Instance.new("BodyGyro", hrp)
-            FlyBodyGyro.Name = "MUMU_GYRO"
-            FlyBodyGyro.P = 9e4
-            FlyBodyGyro.maxTorque = Vector3.new(9e9, 9e9, 9e9)
-            FlyBodyGyro.cframe = hrp.CFrame 
-        end
-        if not hrp:FindFirstChild("MUMU_VELOCITY") then 
-            FlyBodyVelocity = Instance.new("BodyVelocity", hrp)
-            FlyBodyVelocity.Name = "MUMU_VELOCITY"
-            FlyBodyVelocity.velocity = Vector3.new(0, 0, 0)
-            FlyBodyVelocity.maxForce = Vector3.new(9e9, 9e9, 9e9) 
-        end
-        if char:FindFirstChild("Humanoid") then char.Humanoid.PlatformStand = true end
-    else
-        if hrp:FindFirstChild("MUMU_GYRO") then hrp.MUMU_GYRO:Destroy() end
-        if hrp:FindFirstChild("MUMU_VELOCITY") then hrp.MUMU_VELOCITY:Destroy() end
-        if char:FindFirstChild("Humanoid") then char.Humanoid.PlatformStand = false end
-    end
-end
-
-local function UpdateNoclipState(state)
-    if not state then
-        if LocalPlayer.Character then
-            for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
-                if part:IsA("BasePart") then part.CanCollide = true end
-            end
-        end
-    end
-end
-
--- UI 生成
-AddToggle("方框與血條 (ESP)", "ESP")
-AddToggle("真360空間魔術彈 (Silent Aim)", "SilentAim") 
-AddToggle("死鎖瞄準 (Aimbot)", "Aimbot") 
-AddToggle("啟動高級動態物理預判 (含FPS)", "UseDynamicPred") 
-AddToggle("自動扳機 (TriggerBot)", "TriggerBot") 
-AddToggle("自動鎖頭+開火 (開鏡)", "AutoFire_ADS") 
-AddToggle("暴力鎖頭+開火 (不開鏡)", "AutoFire_Hip") 
-AddToggle("隔牆不瞄 (Wall)", "WallCheck")
-AddToggle("飛行模式常駐 (Fly)", "Fly", UpdateFlyState)     
-AddToggle("穿牆模式 (Noclip)", "Noclip", UpdateNoclipState) 
-AddToggle("無限跳躍 (Inf Jump)", "InfJump") 
-AddToggle("解鎖跑速 (Speed)", "SpeedHack") 
-
-AddAdjuster("預判子彈速度(動態用)", "BulletSpeed", 100, 500, 5000)
-AddAdjuster("網路延遲補償(動態用)", "PingComp", 0.01, 0.0, 0.3)
-AddAdjuster("固定預判值(關閉動態時)", "StaticPred", 0.01, 0.0, 0.5)
-AddAdjuster("鎖頭推力(預設1.0死鎖)", "AimbotSens", 0.1, 0.1, 2.0)
-AddAdjuster("跑速設定", "WalkSpeed", 10, 16, 500)
-AddAdjuster("扳機判定範圍", "TriggerRadius", 5, 5, 100)
-AddAdjuster("飛行速度", "FlySpeed", 20, 20, 300)
-AddAdjuster("FOV 鎖定範圍", "FOV", 25, 50, 800)
-
-local Hint = Instance.new("TextLabel", Main)
-Hint.Size = UDim2.new(1, 0, 0, 35)
-Hint.Position = UDim2.new(0, 0, 1, -35)
-Hint.Text = "按 [J] 隱藏 | 對準隊友按 [T] 加白名單"
-Hint.TextColor3 = Color3.fromRGB(0, 255, 100)
-Hint.TextSize = 13
-Hint.Font = Enum.Font.GothamBold
-Hint.BackgroundTransparency = 1
-
--- ⚡ 準心白名單與按鍵控制
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if not gameProcessed then
-        if input.KeyCode == Enum.KeyCode.J then 
-            Main.Visible = not Main.Visible 
-        end
-        if input.KeyCode == Enum.KeyCode.T or input.UserInputType == Enum.UserInputType.MouseButton3 then
-            local closestPlr = nil
-            local maxD = Settings.FOV
-            local center = Camera.ViewportSize / 2
-            
-            for _, p in pairs(Players:GetPlayers()) do
-                if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") then
-                    local pos, onScreen = Camera:WorldToViewportPoint(p.Character.Head.Position)
-                    if onScreen then
-                        local d = (Vector2.new(pos.X, pos.Y) - center).Magnitude
-                        if d < maxD then
-                            maxD = d
-                            closestPlr = p
-                        end
-                    end
-                end
-            end
-            
-            if closestPlr then
-                if WhitelistedPlayers[closestPlr.UserId] then
-                    WhitelistedPlayers[closestPlr.UserId] = nil
-                    Hint.Text = "❌ 移除隊友: " .. closestPlr.Name
-                    Hint.TextColor3 = Color3.fromRGB(255, 50, 50)
-                else
-                    WhitelistedPlayers[closestPlr.UserId] = true
-                    Hint.Text = "✅ 新增隊友: " .. closestPlr.Name
-                    Hint.TextColor3 = Color3.fromRGB(50, 255, 50)
-                end
-                task.delay(2, function() 
-                    Hint.Text = "按 [J] 隱藏 | 對準隊友按 [T] 加白名單" 
-                    Hint.TextColor3 = Color3.fromRGB(0, 255, 100)
-                end)
-            end
-        end
-        
-        local k = input.KeyCode
-        if k == Enum.KeyCode.W then CONTROL.F = 1 
-        elseif k == Enum.KeyCode.S then CONTROL.B = -1 
-        elseif k == Enum.KeyCode.A then CONTROL.L = -1 
-        elseif k == Enum.KeyCode.D then CONTROL.R = 1 
-        elseif k == Enum.KeyCode.Space then CONTROL.UP = 1 
-        elseif k == Enum.KeyCode.LeftControl then CONTROL.DOWN = -1 end
-    end
-end)
-
-UserInputService.InputEnded:Connect(function(input, gameProcessed)
-    local k = input.KeyCode
-    if k == Enum.KeyCode.W then CONTROL.F = 0 
-    elseif k == Enum.KeyCode.S then CONTROL.B = 0 
-    elseif k == Enum.KeyCode.A then CONTROL.L = 0 
-    elseif k == Enum.KeyCode.D then CONTROL.R = 0 
-    elseif k == Enum.KeyCode.Space then CONTROL.UP = 0 
-    elseif k == Enum.KeyCode.LeftControl then CONTROL.DOWN = 0 end
-end)
-
-UserInputService.JumpRequest:Connect(function()
-    if Settings.InfJump then
-        if LocalPlayer.Character then
-            local hum = LocalPlayer.Character:FindFirstChild("Humanoid")
-            if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
-        end
-    end
-end)
-
-local function IsVisible(targetChar)
-    if not Settings.WallCheck then return true end
-    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("Head") then return true end
-    
-    local origin = Camera.CFrame.Position
-    local targetPos = targetChar.Head.Position
-    local rayParams = RaycastParams.new()
-    rayParams.FilterType = Enum.RaycastFilterType.Exclude
-    rayParams.FilterDescendantsInstances = {LocalPlayer.Character, Camera}
-    rayParams.IgnoreWater = true
-    
-    local result = workspace:Raycast(origin, targetPos - origin, rayParams)
-    if result then 
-        if result.Instance:IsDescendantOf(targetChar) then return true else return false end 
-    end
-    return true
-end
-
+-- [[ 1. 核心邏輯：隊友與血量防崩潰 ]]
 local function IsTeammate(p)
-    if p == LocalPlayer then return true end
-    if WhitelistedPlayers[p.UserId] then return true end
-    return false
+    if p == LocalPlayer or WhitelistedPlayers[p.UserId] then return true end
+    if not Settings.TeamESP then return false end
+    local s, r = pcall(function() return p:FindFirstChild("ClientData").Team.Value == LocalPlayer:FindFirstChild("ClientData").Team.Value end)
+    return s and r or false
 end
 
--- ⚡ 防當機完美血量讀取系統
 local function GetHealth(char)
     if not char then return 0, 100 end
     local hp, maxHp = 0, 100
-    
     local hum = char:FindFirstChild("Humanoid")
-    if hum then 
-        hp = tonumber(hum.Health) or 0
-        maxHp = tonumber(hum.MaxHealth) or 100 
-    end
-    
-    local customHealth = char:FindFirstChild("Health") or char:FindFirstChild("HP")
-    if customHealth and (customHealth:IsA("NumberValue") or customHealth:IsA("IntValue")) then 
-        hp = tonumber(customHealth.Value) or hp 
-    end
-    
-    local customMaxHealth = char:FindFirstChild("MaxHealth") or char:FindFirstChild("MaxHP")
-    if customMaxHealth and (customMaxHealth:IsA("NumberValue") or customMaxHealth:IsA("IntValue")) then 
-        maxHp = tonumber(customMaxHealth.Value) or maxHp 
-    end
-    
+    if hum then hp = tonumber(hum.Health) or 0; maxHp = tonumber(hum.MaxHealth) or 100 end
+    local cHP = char:FindFirstChild("Health") or char:FindFirstChild("HP")
+    if cHP and (cHP:IsA("NumberValue") or cHP:IsA("IntValue")) then hp = tonumber(cHP.Value) or hp end
+    local cMaxHP = char:FindFirstChild("MaxHealth") or char:FindFirstChild("MaxHP")
+    if cMaxHP and (cMaxHP:IsA("NumberValue") or cMaxHP:IsA("IntValue")) then maxHp = tonumber(cMaxHP.Value) or maxHp end
     if maxHp <= 0 or maxHp ~= maxHp then maxHp = 100 end
-    if hp ~= hp then hp = 0 end -- 防止 NaN
-    
-    return hp, maxHp
+    if hp ~= hp or hp < 0 then hp = 0 end 
+    return math.clamp(hp, 0, maxHp), maxHp
 end
 
--- ⚡ 獲取終極預判位置 (封神引擎 + FPS幀數補償)
 local function GetPredictedPosition(targetChar)
-    if not targetChar or not targetChar:FindFirstChild("Head") or not targetChar:FindFirstChild("HumanoidRootPart") then
-        return nil
-    end
-    
-    local targetHeadPos = targetChar.Head.Position
-    local targetVelocity = targetChar.HumanoidRootPart.Velocity
+    if not targetChar or not targetChar:FindFirstChild("Head") or not targetChar:FindFirstChild("HumanoidRootPart") then return nil end
+    local headPos, vel = targetChar.Head.Position, targetChar.HumanoidRootPart.Velocity
     local myPos = Camera.CFrame.Position
-    
     if Settings.UseDynamicPred then
-        -- 物理運算：距離 / 子彈速度 = 子彈飛行時間 + 網路延遲補償 + 螢幕幀數補償(DeltaTime)
-        local dist = (targetHeadPos - myPos).Magnitude
-        local fpsCompensation = _G.CurrentDeltaTime
-        local timeToHit = (dist / Settings.BulletSpeed) + Settings.PingComp + fpsCompensation
-        return targetHeadPos + (targetVelocity * timeToHit)
-    else
-        return targetHeadPos + (targetVelocity * Settings.StaticPred)
-    end
+        local timeToHit = ((headPos - myPos).Magnitude / Settings.BulletSpeed) + Settings.PingComp + _G.CurrentDeltaTime
+        return headPos + (vel * timeToHit)
+    else return headPos + (vel * Settings.StaticPred) end
 end
 
--- ⚡ 終極 360 度魔術子彈攔截器
-if hookmetamethod then
-    local OldNamecall
-    OldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
-        local method = getnamecallmethod()
-        local args = {...}
-        
-        if not checkcaller() and Settings.SilentAim then
-            if _G.SilentTarget then
-                local futurePos = GetPredictedPosition(_G.SilentTarget)
-                if futurePos then
-                    if method == "Raycast" and self == workspace then
-                        local origin = args[1]
-                        local direction = args[2]
-                        if direction and typeof(direction) == "Vector3" then
-                            local newDir = (futurePos - origin).Unit * 5000
-                            args[2] = newDir
-                            return OldNamecall(self, unpack(args))
-                        end
-                    elseif method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRayWithWhitelist" or method == "FindPartOnRay" then
-                        local ray = args[1]
-                        if typeof(ray) == "Ray" then
-                            local origin = ray.Origin
-                            args[1] = Ray.new(origin, (futurePos - origin).Unit * 5000)
-                            return OldNamecall(self, unpack(args))
-                        end
-                    end
-                end
-            end
-        end
-        return OldNamecall(self, ...)
-    end)
+-- [[ 2. 現代化 UI 引擎 ]]
+local SafeGui = (gethui and gethui()) or game:GetService("CoreGui")
+if SafeGui:FindFirstChild("MUMU_V48") then SafeGui.MUMU_V48:Destroy() end
+
+local SG = Instance.new("ScreenGui", SafeGui); SG.Name = "MUMU_V48"; SG.ResetOnSpawn = false
+local Main = Instance.new("Frame", SG); Main.Size = UDim2.fromOffset(600, 400); Main.Position = UDim2.fromScale(0.5, 0.5); Main.AnchorPoint = Vector2.new(0.5, 0.5); Main.BackgroundColor3 = Color3.fromRGB(20, 21, 25)
+Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 8)
+local Title = Instance.new("TextLabel", Main); Title.Size = UDim2.new(0, 150, 0, 40); Title.Position = UDim2.new(0, 15, 0, 5); Title.Text = "Z3US | Rivals (MUMU)"; Title.TextColor3 = Color3.new(1,1,1); Title.Font = Enum.Font.GothamBold; Title.TextSize = 16; Title.BackgroundTransparency = 1; Title.TextXAlignment = Enum.TextXAlignment.Left
+
+local Sidebar = Instance.new("Frame", Main); Sidebar.Size = UDim2.new(0, 150, 1, -50); Sidebar.Position = UDim2.new(0, 0, 0, 50); Sidebar.BackgroundTransparency = 1
+local SidebarLayout = Instance.new("UIListLayout", Sidebar); SidebarLayout.Padding = UDim.new(0, 5); SidebarLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+local ContentArea = Instance.new("Frame", Main); ContentArea.Size = UDim2.new(1, -160, 1, -50); ContentArea.Position = UDim2.new(0, 160, 0, 50); ContentArea.BackgroundTransparency = 1
+
+local Tabs = {}
+local function CreateTab(name, isFirst)
+    local btn = Instance.new("TextButton", Sidebar); btn.Size = UDim2.new(0.9, 0, 0, 35); btn.Text = "  " .. name; btn.Font = Enum.Font.GothamSemibold; btn.TextSize = 14; btn.TextColor3 = Color3.new(1,1,1); btn.TextXAlignment = Enum.TextXAlignment.Left; Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+    local page = Instance.new("ScrollingFrame", ContentArea); page.Size = UDim2.new(1, 0, 1, 0); page.BackgroundTransparency = 1; page.ScrollBarThickness = 2; page.Visible = isFirst
+    local layout = Instance.new("UIListLayout", page); layout.Padding = UDim.new(0, 8)
     
-    local OldIndex
-    OldIndex = hookmetamethod(game, "__index", function(self, key)
-        if not checkcaller() and Settings.SilentAim then
-            if _G.SilentTarget then
-                local futurePos = GetPredictedPosition(_G.SilentTarget)
-                if futurePos then
-                    if typeof(self) == "Instance" and self:IsA("Mouse") then
-                        if key == "Hit" then return CFrame.new(futurePos)
-                        elseif key == "Target" then return _G.SilentTarget:FindFirstChild("Head") end
-                    end
-                end
-            end
+    if isFirst then btn.BackgroundColor3 = Color3.fromRGB(30, 31, 38) else btn.BackgroundColor3 = Color3.fromRGB(20, 21, 25) end
+    btn.MouseButton1Click:Connect(function()
+        for _, t in pairs(Tabs) do t.Btn.BackgroundColor3 = Color3.fromRGB(20, 21, 25); t.Page.Visible = false end
+        btn.BackgroundColor3 = Color3.fromRGB(30, 31, 38); page.Visible = true
+    end)
+    table.insert(Tabs, {Btn = btn, Page = page}); return page
+end
+
+local function CreateToggle(parent, name, key)
+    local frame = Instance.new("Frame", parent); frame.Size = UDim2.new(1, -10, 0, 40); frame.BackgroundColor3 = Color3.fromRGB(26, 28, 33); Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 6); Instance.new("UIStroke", frame).Color = Color3.fromRGB(40, 42, 48)
+    local lbl = Instance.new("TextLabel", frame); lbl.Size = UDim2.new(0.8, 0, 1, 0); lbl.Position = UDim2.new(0, 15, 0, 0); lbl.Text = name; lbl.TextColor3 = Color3.new(1,1,1); lbl.Font = Enum.Font.Gotham; lbl.TextSize = 14; lbl.BackgroundTransparency = 1; lbl.TextXAlignment = Enum.TextXAlignment.Left
+    local btn = Instance.new("TextButton", frame); btn.Size = UDim2.new(0, 40, 0, 20); btn.Position = UDim2.new(1, -55, 0.5, -10); btn.Text = ""; Instance.new("UICorner", btn).CornerRadius = UDim.new(1, 0)
+    local function update() if Settings[key] then btn.BackgroundColor3 = Color3.fromRGB(140, 155, 208) else btn.BackgroundColor3 = Color3.fromRGB(60, 60, 65) end end
+    update(); btn.MouseButton1Click:Connect(function() Settings[key] = not Settings[key]; update() end)
+end
+
+local function CreateSlider(parent, name, key, min, max)
+    local frame = Instance.new("Frame", parent); frame.Size = UDim2.new(1, -10, 0, 40); frame.BackgroundColor3 = Color3.fromRGB(26, 28, 33); Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 6); Instance.new("UIStroke", frame).Color = Color3.fromRGB(40, 42, 48)
+    local lbl = Instance.new("TextLabel", frame); lbl.Size = UDim2.new(0.5, 0, 1, 0); lbl.Position = UDim2.new(0, 15, 0, 0); lbl.Text = name; lbl.TextColor3 = Color3.new(1,1,1); lbl.Font = Enum.Font.Gotham; lbl.TextSize = 14; lbl.BackgroundTransparency = 1; lbl.TextXAlignment = Enum.TextXAlignment.Left
+    local val = Instance.new("TextLabel", frame); val.Size = UDim2.new(0, 30, 1, 0); val.Position = UDim2.new(1, -150, 0, 0); val.Text = tostring(Settings[key]); val.TextColor3 = Color3.fromRGB(150, 150, 150); val.Font = Enum.Font.Gotham; val.TextSize = 12; val.BackgroundTransparency = 1
+    local track = Instance.new("Frame", frame); track.Size = UDim2.new(0, 100, 0, 4); track.Position = UDim2.new(1, -115, 0.5, -2); track.BackgroundColor3 = Color3.fromRGB(60, 60, 65); Instance.new("UICorner", track).CornerRadius = UDim.new(1, 0)
+    local fill = Instance.new("Frame", track); fill.Size = UDim2.new((Settings[key]-min)/(max-min), 0, 1, 0); fill.BackgroundColor3 = Color3.fromRGB(140, 155, 208); Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
+    local btn = Instance.new("TextButton", track); btn.Size = UDim2.new(1, 0, 0, 20); btn.Position = UDim2.new(0, 0, 0.5, -10); btn.BackgroundTransparency = 1; btn.Text = ""
+    local dragging = false
+    btn.MouseButton1Down:Connect(function() dragging = true end)
+    UserInputService.InputEnded:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end end)
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            local pct = math.clamp((input.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
+            fill.Size = UDim2.new(pct, 0, 1, 0)
+            local newVal = min + (max - min) * pct; Settings[key] = math.floor(newVal * 100)/100; val.Text = tostring(Settings[key])
         end
-        return OldIndex(self, key)
     end)
 end
 
-RunService.Stepped:Connect(function()
-    if Settings.Noclip then
-        if LocalPlayer.Character then
-            for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
-                if part:IsA("BasePart") and part.CanCollide then part.CanCollide = false end
+local TabLegit = CreateTab("Legit", true)
+CreateToggle(TabLegit, "Enable Aimbot", "Aimbot")
+CreateToggle(TabLegit, "Wall Check", "WallCheck")
+CreateToggle(TabLegit, "TriggerBot (Auto Shoot)", "TriggerBot")
+CreateSlider(TabLegit, "Aimbot Smoothness", "AimbotSens", 0.1, 2.0)
+CreateSlider(TabLegit, "Aimbot FOV", "FOV", 50, 800)
+
+local TabRage = CreateTab("Rage", false)
+CreateToggle(TabRage, "360 Silent Aim (Magic Bullet)", "SilentAim")
+CreateToggle(TabRage, "Auto Click When ADS", "RageAutoClick")
+CreateToggle(TabRage, "Enable Dynamic Prediction", "UseDynamicPred")
+CreateSlider(TabRage, "Bullet Speed (Pred)", "BulletSpeed", 500, 5000)
+
+local TabVisuals = CreateTab("Visuals", false)
+CreateToggle(TabVisuals, "Enable ESP", "ESP")
+CreateToggle(TabVisuals, "Constant Box Size", "ConstantBox")
+CreateToggle(TabVisuals, "Show Health Bar", "HealthBar")
+CreateToggle(TabVisuals, "Team ESP", "TeamESP")
+
+local TabPlayer = CreateTab("Player", false)
+CreateToggle(TabPlayer, "Enable Fly", "Fly")
+CreateSlider(TabPlayer, "Fly Speed", "FlySpeed", 20, 300)
+CreateToggle(TabPlayer, "Speed Hack", "SpeedHack")
+CreateSlider(TabPlayer, "Walk Speed", "WalkSpeed", 16, 300)
+CreateToggle(TabPlayer, "Infinite Jump", "InfJump")
+CreateToggle(TabPlayer, "Noclip", "Noclip")
+
+-- UI 拖曳邏輯
+local draggingUI, dragInput, dragStart, startPos
+Main.InputBegan:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 then draggingUI = true; dragStart = input.Position; startPos = Main.Position end end)
+Main.InputEnded:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 then draggingUI = false end end)
+UserInputService.InputChanged:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseMovement then dragInput = input end end)
+RunService.RenderStepped:Connect(function() if draggingUI and dragInput then local delta = dragInput.Position - dragStart; Main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y) end end)
+UserInputService.InputBegan:Connect(function(i, gp) if not gp and i.KeyCode == Enum.KeyCode.J then Main.Visible = not Main.Visible end end)
+
+-- [[ 3. 外掛核心系統 ]]
+local FlyBodyGyro, FlyBodyVelocity, CONTROL = nil, nil, {F=0, B=0, L=0, R=0, UP=0, DOWN=0}
+UserInputService.InputBegan:Connect(function(i, gp) if not gp then local k=i.KeyCode; if k==Enum.KeyCode.W then CONTROL.F=1 elseif k==Enum.KeyCode.S then CONTROL.B=-1 elseif k==Enum.KeyCode.A then CONTROL.L=-1 elseif k==Enum.KeyCode.D then CONTROL.R=1 elseif k==Enum.KeyCode.Space then CONTROL.UP=1 elseif k==Enum.KeyCode.LeftControl then CONTROL.DOWN=-1 elseif k==Enum.KeyCode.T then local c, md, ctr = nil, Settings.FOV, Camera.ViewportSize/2; for _, p in pairs(Players:GetPlayers()) do if p~=LocalPlayer and p.Character and p.Character:FindFirstChild("Head") then local pos, os = Camera:WorldToViewportPoint(p.Character.Head.Position) if os then local d = (Vector2.new(pos.X, pos.Y)-ctr).Magnitude; if d<md then md=d; c=p end end end end; if c then WhitelistedPlayers[c.UserId] = not WhitelistedPlayers[c.UserId] end end end end)
+UserInputService.InputEnded:Connect(function(i) local k=i.KeyCode; if k==Enum.KeyCode.W then CONTROL.F=0 elseif k==Enum.KeyCode.S then CONTROL.B=0 elseif k==Enum.KeyCode.A then CONTROL.L=0 elseif k==Enum.KeyCode.D then CONTROL.R=0 elseif k==Enum.KeyCode.Space then CONTROL.UP=0 elseif k==Enum.KeyCode.LeftControl then CONTROL.DOWN=0 end end)
+UserInputService.JumpRequest:Connect(function() if Settings.InfJump and LocalPlayer.Character then local hum=LocalPlayer.Character:FindFirstChild("Humanoid") if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end end end)
+
+local function IsVisible(tChar)
+    if not Settings.WallCheck or not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("Head") then return true end
+    local r = workspace:Raycast(Camera.CFrame.Position, tChar.Head.Position - Camera.CFrame.Position, RaycastParams.new({FilterType = Enum.RaycastFilterType.Exclude, FilterDescendantsInstances = {LocalPlayer.Character, Camera}, IgnoreWater = true}))
+    return r and r.Instance:IsDescendantOf(tChar) or not r
+end
+
+-- ⚡ 360 魔術彈攔截器
+if hookmetamethod then
+    local OldNC = hookmetamethod(game, "__namecall", function(self, ...)
+        local m = getnamecallmethod(); local a = {...}
+        if not checkcaller() and Settings.SilentAim and _G.SilentTarget then
+            local fp = GetPredictedPosition(_G.SilentTarget)
+            if fp and (m == "Raycast" or m == "FindPartOnRay" or m == "FindPartOnRayWithIgnoreList") then
+                if m == "Raycast" and typeof(a[2]) == "Vector3" then a[2] = (fp - a[1]).Unit * 5000; return OldNC(self, unpack(a)) end
+                if typeof(a[1]) == "Ray" then a[1] = Ray.new(a[1].Origin, (fp - a[1].Origin).Unit * 5000); return OldNC(self, unpack(a)) end
             end
         end
-    end
-    if Settings.SpeedHack then
-        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-            LocalPlayer.Character.Humanoid.WalkSpeed = Settings.WalkSpeed
+        return OldNC(self, ...)
+    end)
+    local OldIdx = hookmetamethod(game, "__index", function(self, k)
+        if not checkcaller() and Settings.SilentAim and _G.SilentTarget then
+            local fp = GetPredictedPosition(_G.SilentTarget)
+            if fp and typeof(self) == "Instance" and self:IsA("Mouse") then
+                if k == "Hit" then return CFrame.new(fp) elseif k == "Target" then return _G.SilentTarget:FindFirstChild("Head") end
+            end
         end
-    end
-end)
+        return OldIdx(self, k)
+    end)
+end
 
--- ⚡ 完美血條繪製系統
-local function UpdateESP()
+local function FireWeapon() if mouse1click then pcall(mouse1click) else VirtualInputManager:SendMouseButtonEvent(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2, 0, true, game, 1); task.wait(0.01); VirtualInputManager:SendMouseButtonEvent(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2, 0, false, game, 1) end end
+
+local LockedTarget = nil; local lastFire = 0
+_G.MUMU_PRO_CONNECTION = RunService.RenderStepped:Connect(function()
+    -- Fly, Noclip, Speed
+    if LocalPlayer.Character then
+        if Settings.Fly and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            local hrp = LocalPlayer.Character.HumanoidRootPart
+            if not hrp:FindFirstChild("MUMU_GYRO") then FlyBodyGyro=Instance.new("BodyGyro", hrp); FlyBodyGyro.Name="MUMU_GYRO"; FlyBodyGyro.P=9e4; FlyBodyGyro.maxTorque=Vector3.new(9e9,9e9,9e9); FlyBodyVelocity=Instance.new("BodyVelocity", hrp); FlyBodyVelocity.Name="MUMU_VELOCITY"; FlyBodyVelocity.maxForce=Vector3.new(9e9,9e9,9e9) end
+            FlyBodyGyro.cframe = Camera.CFrame; FlyBodyVelocity.velocity = ((Camera.CFrame.LookVector*(CONTROL.F+CONTROL.B)) + (Camera.CFrame.RightVector*(CONTROL.L+CONTROL.R)) + (Camera.CFrame.UpVector*(CONTROL.UP+CONTROL.DOWN))).Magnitude > 0 and ((Camera.CFrame.LookVector*(CONTROL.F+CONTROL.B)) + (Camera.CFrame.RightVector*(CONTROL.L+CONTROL.R)) + (Camera.CFrame.UpVector*(CONTROL.UP+CONTROL.DOWN))).Unit * Settings.FlySpeed or Vector3.new(0,0,0)
+            if LocalPlayer.Character:FindFirstChild("Humanoid") then LocalPlayer.Character.Humanoid.PlatformStand = true end
+        elseif LocalPlayer.Character:FindFirstChild("HumanoidRootPart") and LocalPlayer.Character.HumanoidRootPart:FindFirstChild("MUMU_GYRO") then
+            LocalPlayer.Character.HumanoidRootPart.MUMU_GYRO:Destroy(); LocalPlayer.Character.HumanoidRootPart.MUMU_VELOCITY:Destroy()
+            if LocalPlayer.Character:FindFirstChild("Humanoid") then LocalPlayer.Character.Humanoid.PlatformStand = false end
+        end
+        if Settings.Noclip then for _, p in pairs(LocalPlayer.Character:GetDescendants()) do if p:IsA("BasePart") and p.CanCollide then p.CanCollide = false end end end
+        if Settings.SpeedHack and LocalPlayer.Character:FindFirstChild("Humanoid") then LocalPlayer.Character.Humanoid.WalkSpeed = Settings.WalkSpeed end
+    end
+
+    -- ESP 繪製 (含恆定大小方框)
     for _, p in pairs(Players:GetPlayers()) do
         if p ~= LocalPlayer then
-            if not _G.MUMU_ESP_DRAWINGS[p] then
-                _G.MUMU_ESP_DRAWINGS[p] = { Box = Drawing.new("Square"), HealthBg = Drawing.new("Line"), HealthBar = Drawing.new("Line") }
-                _G.MUMU_ESP_DRAWINGS[p].Box.Color = Color3.fromRGB(255, 50, 50)
-                _G.MUMU_ESP_DRAWINGS[p].Box.Thickness = 1.5
-                _G.MUMU_ESP_DRAWINGS[p].Box.Filled = false
-                _G.MUMU_ESP_DRAWINGS[p].HealthBg.Color = Color3.fromRGB(0, 0, 0)
-                _G.MUMU_ESP_DRAWINGS[p].HealthBg.Thickness = 4
-                _G.MUMU_ESP_DRAWINGS[p].HealthBar.Thickness = 2
-            end
-
-            local drawings = _G.MUMU_ESP_DRAWINGS[p]
-            pcall(function()
-                local hp, maxHp = GetHealth(p.Character)
-                if Settings.ESP and p.Character and p.Character:FindFirstChild("HumanoidRootPart") and hp > 0 then
-                    if IsTeammate(p) then 
-                        drawings.Box.Visible = false; drawings.HealthBg.Visible = false; drawings.HealthBar.Visible = false 
-                        return 
-                    end
-                    local hrp = p.Character.HumanoidRootPart
-                    local dist = (Camera.CFrame.Position - hrp.Position).Magnitude
-                    if dist < Settings.MaxDistance then
-                        local topPos, onScreen = Camera:WorldToViewportPoint(hrp.Position + Vector3.new(0, 2.5, 0))
-                        local bottomPos = Camera:WorldToViewportPoint(hrp.Position - Vector3.new(0, 3, 0))
-                        local centerPos = Camera:WorldToViewportPoint(hrp.Position)
-                        if onScreen then
-                            local height = math.abs(topPos.Y - bottomPos.Y)
-                            local width = height * 0.6
-                            drawings.Box.Size = Vector2.new(width, height)
-                            drawings.Box.Position = Vector2.new(centerPos.X - width/2, topPos.Y)
-                            drawings.Box.Visible = true
-                            
-                            -- 防崩潰血量百分比計算
-                            local healthPercent = hp / maxHp
-                            if healthPercent ~= healthPercent or healthPercent < 0 then healthPercent = 0 end
-                            healthPercent = math.clamp(healthPercent, 0, 1)
-                            
-                            local barX = centerPos.X - width/2 - 6
-                            drawings.HealthBg.From = Vector2.new(barX, bottomPos.Y)
-                            drawings.HealthBg.To = Vector2.new(barX, topPos.Y)
-                            drawings.HealthBg.Visible = true
-                            
-                            local barHeight = height * healthPercent
-                            drawings.HealthBar.From = Vector2.new(barX, bottomPos.Y)
-                            drawings.HealthBar.To = Vector2.new(barX, bottomPos.Y - barHeight)
-                            drawings.HealthBar.Color = Color3.fromHSV(healthPercent * 0.3, 1, 1)
-                            drawings.HealthBar.Visible = true
-                        else drawings.Box.Visible = false; drawings.HealthBg.Visible = false; drawings.HealthBar.Visible = false end
-                    else drawings.Box.Visible = false; drawings.HealthBg.Visible = false; drawings.HealthBar.Visible = false end
-                else drawings.Box.Visible = false; drawings.HealthBg.Visible = false; drawings.HealthBar.Visible = false end
-            end)
+            if not _G.MUMU_ESP_DRAWINGS[p] then _G.MUMU_ESP_DRAWINGS[p] = { Box = Drawing.new("Square"), HealthBg = Drawing.new("Line"), HealthBar = Drawing.new("Line") }; local d = _G.MUMU_ESP_DRAWINGS[p]; d.Box.Color = Color3.fromRGB(255, 50, 50); d.Box.Thickness = 1.5; d.Box.Filled = false; d.HealthBg.Color = Color3.fromRGB(0,0,0); d.HealthBg.Thickness = 4; d.HealthBar.Thickness = 2 end
+            local d = _G.MUMU_ESP_DRAWINGS[p]
+            local hp, maxHp = GetHealth(p.Character)
+            if Settings.ESP and p.Character and p.Character:FindFirstChild("HumanoidRootPart") and hp > 0 and not IsTeammate(p) then
+                local hrp = p.Character.HumanoidRootPart
+                local topPos, onScreen = Camera:WorldToViewportPoint(hrp.Position + Vector3.new(0, 2.5, 0))
+                local bottomPos = Camera:WorldToViewportPoint(hrp.Position - Vector3.new(0, 3, 0))
+                local centerPos = Camera:WorldToViewportPoint(hrp.Position)
+                if onScreen and (hrp.Position - Camera.CFrame.Position).Magnitude < Settings.MaxDistance then
+                    -- 恆定尺寸或動態尺寸
+                    local height, width
+                    if Settings.ConstantBox then width, height = 40, 60 else height = math.abs(topPos.Y - bottomPos.Y); width = height * 0.6 end
+                    
+                    d.Box.Size = Vector2.new(width, height); d.Box.Position = Vector2.new(centerPos.X - width/2, centerPos.Y - height/2); d.Box.Visible = true
+                    
+                    if Settings.HealthBar then
+                        local pct = math.clamp(hp/maxHp, 0, 1)
+                        local barX, barYBottom, barYTop = centerPos.X - width/2 - 6, centerPos.Y + height/2, centerPos.Y - height/2
+                        d.HealthBg.From = Vector2.new(barX, barYBottom); d.HealthBg.To = Vector2.new(barX, barYTop); d.HealthBg.Visible = true
+                        d.HealthBar.From = Vector2.new(barX, barYBottom); d.HealthBar.To = Vector2.new(barX, barYBottom - (height * pct)); d.HealthBar.Color = Color3.fromHSV(pct * 0.3, 1, 1); d.HealthBar.Visible = true
+                    else d.HealthBg.Visible = false; d.HealthBar.Visible = false end
+                else d.Box.Visible = false; d.HealthBg.Visible = false; d.HealthBar.Visible = false end
+            else d.Box.Visible = false; d.HealthBg.Visible = false; d.HealthBar.Visible = false end
         end
     end
-end
 
-local function FireWeapon()
-    if mouse1click then pcall(function() mouse1click() end) 
-    else
-        local center = Camera.ViewportSize / 2
-        task.spawn(function()
-            VirtualInputManager:SendMouseButtonEvent(center.X, center.Y, 0, true, game, 1)
-            task.wait(0.01)
-            VirtualInputManager:SendMouseButtonEvent(center.X, center.Y, 0, false, game, 1)
-        end)
-    end
-end
-
-local function FindNewTarget()
-    local target = nil
-    local maxDist = Settings.FOV
-    local screenCenter = Camera.ViewportSize / 2 
+    -- 戰鬥系統 (Aimbot & 360 魔術彈 & 自動連點)
+    local isRC = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
+    local myPos = Camera.CFrame.Position
+    _G.SilentTarget = nil; LockedTarget = nil
+    
+    -- 搜尋目標
+    local mdA, mdS = Settings.FOV, Settings.MaxDistance
     for _, p in pairs(Players:GetPlayers()) do
         local hp, _ = GetHealth(p.Character)
-        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") and hp > 0 then
-            if not IsTeammate(p) then
-                local distToPlayer = (Camera.CFrame.Position - p.Character.Head.Position).Magnitude
-                if distToPlayer <= Settings.MaxDistance and IsVisible(p.Character) then
-                    local pos, onScreen = Camera:WorldToViewportPoint(p.Character.Head.Position)
-                    if onScreen then
-                        local dist = (Vector2.new(pos.X, pos.Y) - screenCenter).Magnitude
-                        if dist < maxDist then maxDist = dist; target = p.Character end
-                    end
-                end
+        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") and hp > 0 and not IsTeammate(p) and IsVisible(p.Character) then
+            local tPos = p.Character.Head.Position
+            if Settings.SilentAim and (tPos - myPos).Magnitude < mdS then mdS = (tPos - myPos).Magnitude; _G.SilentTarget = p.Character end
+            if Settings.Aimbot or Settings.TriggerBot then
+                local sp, os = Camera:WorldToViewportPoint(tPos)
+                if os then local d = (Vector2.new(sp.X, sp.Y) - Camera.ViewportSize/2).Magnitude; if d < mdA then mdA = d; LockedTarget = p.Character end end
             end
         end
     end
-    return target
-end
 
-local function FindSilentAimTarget()
-    local target = nil
-    local shortestDist = Settings.MaxDistance
-    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Head") then
-        local myPos = LocalPlayer.Character.Head.Position
-        for _, p in pairs(Players:GetPlayers()) do
-            local hp, _ = GetHealth(p.Character)
-            if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") and hp > 0 then
-                if not IsTeammate(p) and IsVisible(p.Character) then
-                    local dist = (myPos - p.Character.Head.Position).Magnitude
-                    if dist < shortestDist then shortestDist = dist; target = p.Character end
-                end
-            end
+    -- Rage Auto Click (只要開啟魔術彈且按住右鍵，全自動開火)
+    if Settings.SilentAim and Settings.RageAutoClick and isRC and _G.SilentTarget and tick() - lastFire > 0.05 then
+        FireWeapon(); lastFire = tick()
+    end
+
+    -- Legit Aimbot
+    if LockedTarget and isRC and Settings.Aimbot then
+        local fp = GetPredictedPosition(LockedTarget)
+        if fp then
+            local sp, os = Camera:WorldToViewportPoint(fp)
+            if os and mousemoverel then mousemoverel((sp.X - Camera.ViewportSize.X/2) * Settings.AimbotSens, (sp.Y - Camera.ViewportSize.Y/2) * Settings.AimbotSens) end
         end
     end
-    return target
-end
-
-local LockedTarget = nil 
-local lastRapidFire = 0
-
--- [[ 4. 戰鬥核心引擎 ]]
-_G.MUMU_PRO_CONNECTION = RunService.RenderStepped:Connect(function()
-    UpdateESP()
-
-    if Settings.Fly and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-        local hrp = LocalPlayer.Character.HumanoidRootPart
-        local gyro, vel = hrp:FindFirstChild("MUMU_GYRO"), hrp:FindFirstChild("MUMU_VELOCITY")
-        if gyro and vel then
-            local camCF = Camera.CFrame
-            gyro.cframe = camCF
-            local moveDir = Vector3.new(0, 0, 0)
-            moveDir = moveDir + camCF.LookVector * (CONTROL.F + CONTROL.B)
-            moveDir = moveDir + camCF.RightVector * (CONTROL.L + CONTROL.R)
-            moveDir = moveDir + camCF.UpVector * (CONTROL.UP + CONTROL.DOWN)
-            if moveDir.Magnitude > 0 then vel.velocity = moveDir.Unit * Settings.FlySpeed 
-            else vel.velocity = Vector3.new(0, 0, 0) end
-        end
-    end
-
-    local isRightClicking = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
-    
-    if Settings.SilentAim then _G.SilentTarget = FindSilentAimTarget() else _G.SilentTarget = nil end
-    
-    if Settings.Aimbot or Settings.AutoFire_Hip or Settings.AutoFire_ADS or Settings.TriggerBot then
-        if not LockedTarget then LockedTarget = FindNewTarget() end
-        local hp, _ = GetHealth(LockedTarget)
-        
-        if LockedTarget and LockedTarget:FindFirstChild("Head") and hp > 0 then
-            local distFromTarget = (Camera.CFrame.Position - LockedTarget.Head.Position).Magnitude
-            if distFromTarget > Settings.MaxDistance or not IsVisible(LockedTarget) then 
-                LockedTarget = nil; return 
-            end
-
-            local futurePos = GetPredictedPosition(LockedTarget)
-            if not futurePos then return end
-            
-            local screenPos, onScreen = Camera:WorldToViewportPoint(futurePos)
-            if onScreen then
-                local screenCenter = Camera.ViewportSize / 2
-                local deltaX, deltaY = screenPos.X - screenCenter.X, screenPos.Y - screenCenter.Y
-                local distToCenter = math.sqrt(deltaX^2 + deltaY^2)
-
-                local shouldAim = (Settings.Aimbot and isRightClicking) or (Settings.AutoFire_ADS and isRightClicking) or Settings.AutoFire_Hip
-                if shouldAim and mousemoverel then 
-                    mousemoverel(deltaX * Settings.AimbotSens, deltaY * Settings.AimbotSens) 
-                end
-
-                local shouldFire = (Settings.AutoFire_ADS and isRightClicking) or Settings.AutoFire_Hip or (Settings.TriggerBot and distToCenter <= Settings.TriggerRadius)
-                if shouldFire and tick() - lastRapidFire > 0.05 then
-                    FireWeapon()
-                    lastRapidFire = tick()
-                end
-            else LockedTarget = nil end
-        else LockedTarget = nil end
-    else LockedTarget = nil end
-end)
-
-LocalPlayer.CharacterAdded:Connect(function(newChar)
-    task.delay(0.5, function() if Settings.Fly then UpdateFlyState(true) end end)
-end)
-
-Players.PlayerRemoving:Connect(function(plr)
-    if _G.MUMU_ESP_DRAWINGS and _G.MUMU_ESP_DRAWINGS[plr] then 
-        _G.MUMU_ESP_DRAWINGS[plr].Box:Remove()
-        _G.MUMU_ESP_DRAWINGS[plr].HealthBg:Remove()
-        _G.MUMU_ESP_DRAWINGS[plr].HealthBar:Remove()
-        _G.MUMU_ESP_DRAWINGS[plr] = nil 
-    end
-    if WhitelistedPlayers[plr.UserId] then WhitelistedPlayers[plr.UserId] = nil end
-    if LockedTarget and LockedTarget.Name == plr.Name then LockedTarget = nil end
 end)
