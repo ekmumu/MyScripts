@@ -1,5 +1,5 @@
 -- ==========================================
--- MUMU PRO (V43) - 新增無限跳躍 + 跑速拉滿
+-- MUMU PRO (V44) - 暴力死鎖 + 預判導航拐彎版
 -- ==========================================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -39,13 +39,13 @@ local Settings = {
     Fly = false,       
     Noclip = false,    
     FlySpeed = 100,
-    InfJump = false,      -- ⚡ 無限跳躍
-    SpeedHack = false,    -- ⚡ 跑速修改
-    WalkSpeed = 100,      -- ⚡ 跑速數值
-    Prediction = 0.12, 
+    InfJump = false,      
+    SpeedHack = false,    
+    WalkSpeed = 100,      
+    Prediction = 0.15,    -- ⚡ 預設提高預判
     FOV = 250,         
     MaxDistance = 350,
-    AimbotSens = 0.5   
+    AimbotSens = 1.0      -- ⚡ 預設改為 1.0 (瞬間死鎖)
 }
 
 -- [[ 1. UI 介面建立 ]]
@@ -59,7 +59,7 @@ ScreenGui.Name = "MUMU_PHYSICS_LOCK"
 ScreenGui.ResetOnSpawn = false
 
 local Main = Instance.new("Frame", ScreenGui)
-Main.Size = UDim2.fromOffset(350, 780) 
+Main.Size = UDim2.fromOffset(360, 780) 
 Main.Position = UDim2.fromScale(0.5, 0.5)
 Main.AnchorPoint = Vector2.new(0.5, 0.5)
 Main.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
@@ -82,7 +82,7 @@ Container.Size = UDim2.new(0.9, 0, 1, -100)
 Container.Position = UDim2.fromScale(0.05, 0.12)
 Container.BackgroundTransparency = 1
 Container.ScrollBarThickness = 2
-Container.CanvasSize = UDim2.new(0, 0, 2.6, 0) 
+Container.CanvasSize = UDim2.new(0, 0, 2.8, 0) 
 
 local Layout = Instance.new("UIListLayout", Container)
 Layout.Padding = UDim.new(0, 8)
@@ -133,14 +133,14 @@ local function AddAdjuster(name, settingKey, step, min, max)
     title.Text = name
     title.TextColor3 = Color3.new(1, 1, 1)
     title.Font = Enum.Font.GothamBold
-    title.TextSize = 13
+    title.TextSize = 12
     title.TextXAlignment = Enum.TextXAlignment.Left
     title.BackgroundTransparency = 1
     
     local valText = Instance.new("TextLabel", frame)
     valText.Size = UDim2.new(0.2, 0, 1, 0)
     valText.Position = UDim2.new(0.65, 0, 0, 0)
-    valText.Text = tostring(Settings[settingKey])
+    valText.Text = string.format(step == math.floor(step) and "%d" or "%.2f", Settings[settingKey])
     valText.TextColor3 = Color3.new(1, 1, 1)
     valText.Font = Enum.Font.GothamBold
     valText.TextSize = 14
@@ -169,14 +169,16 @@ local function AddAdjuster(name, settingKey, step, min, max)
     btnMinus.MouseButton1Click:Connect(function() 
         if Settings[settingKey] - step >= min then 
             Settings[settingKey] = Settings[settingKey] - step
-            valText.Text = tostring(Settings[settingKey]) 
+            Settings[settingKey] = math.floor(Settings[settingKey] * 100 + 0.5) / 100
+            valText.Text = string.format(step == math.floor(step) and "%d" or "%.2f", Settings[settingKey])
         end 
     end)
     
     btnPlus.MouseButton1Click:Connect(function() 
         if Settings[settingKey] + step <= max then 
             Settings[settingKey] = Settings[settingKey] + step
-            valText.Text = tostring(Settings[settingKey]) 
+            Settings[settingKey] = math.floor(Settings[settingKey] * 100 + 0.5) / 100
+            valText.Text = string.format(step == math.floor(step) and "%d" or "%.2f", Settings[settingKey])
         end 
     end)
 end
@@ -240,10 +242,10 @@ end
 
 -- UI 生成
 AddToggle("方框與血條 (ESP)", "ESP")
-AddToggle("子彈拐彎 (Silent Aim)", "SilentAim") 
-AddToggle("實體滑鼠鎖頭 (右鍵瞄準)", "Aimbot") 
-AddToggle("純扳機 (指到敵人自動開火)", "TriggerBot") 
-AddToggle("自動鎖頭+開火 (開鏡時)", "AutoFire_ADS") 
+AddToggle("暴力拐彎 (Silent Aim)", "SilentAim") 
+AddToggle("死鎖瞄準 (Aimbot)", "Aimbot") 
+AddToggle("自動扳機 (TriggerBot)", "TriggerBot") 
+AddToggle("自動鎖頭+開火 (開鏡)", "AutoFire_ADS") 
 AddToggle("暴力鎖頭+開火 (不開鏡)", "AutoFire_Hip") 
 AddToggle("隔牆不瞄 (Wall)", "WallCheck")
 AddToggle("飛行模式常駐 (Fly)", "Fly", UpdateFlyState)     
@@ -251,8 +253,10 @@ AddToggle("穿牆模式 (Noclip)", "Noclip", UpdateNoclipState)
 AddToggle("無限跳躍 (Inf Jump)", "InfJump") 
 AddToggle("解鎖跑速 (Speed)", "SpeedHack") 
 
-AddAdjuster("跑速設定 (預設16)", "WalkSpeed", 10, 16, 500)
-AddAdjuster("鎖頭推力 (太抖請調低)", "AimbotSens", 0.1, 0.1, 2.0)
+-- ⚡ 新增預判拉桿
+AddAdjuster("預判補償(打飛天掛調高)", "Prediction", 0.01, 0.0, 0.5)
+AddAdjuster("鎖頭推力(預設1.0為死鎖)", "AimbotSens", 0.1, 0.1, 2.0)
+AddAdjuster("跑速設定", "WalkSpeed", 10, 16, 500)
 AddAdjuster("扳機判定範圍", "TriggerRadius", 5, 5, 100)
 AddAdjuster("飛行速度", "FlySpeed", 20, 20, 300)
 AddAdjuster("FOV 鎖定範圍", "FOV", 25, 50, 800)
@@ -435,7 +439,7 @@ local function GetHealth(char)
     return hp, maxHp
 end
 
--- ⚡ 智能子彈拐彎
+-- ⚡ 終極強化子彈拐彎 (加入預判補償、解除長度限制)
 if hookmetamethod then
     local OldNamecall
     OldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
@@ -443,24 +447,26 @@ if hookmetamethod then
         local args = {...}
         
         if not checkcaller() and Settings.SilentAim then
-            if _G.LockedTarget and _G.LockedTarget:FindFirstChild("Head") then
+            if _G.LockedTarget and _G.LockedTarget:FindFirstChild("Head") and _G.LockedTarget:FindFirstChild("HumanoidRootPart") then
+                
+                -- 計算敵人的未來位置 (套用面板上的 Prediction 拉桿)
+                local futurePos = _G.LockedTarget.Head.Position + (_G.LockedTarget.HumanoidRootPart.Velocity * Settings.Prediction)
+
                 if method == "Raycast" and self == workspace then
                     local origin = args[1]
                     local direction = args[2]
                     
-                    if direction and typeof(direction) == "Vector3" and direction.Magnitude > 20 then
-                        local targetPos = _G.LockedTarget.Head.Position
-                        local newDir = (targetPos - origin).Unit * direction.Magnitude
+                    if direction and typeof(direction) == "Vector3" then
+                        local newDir = (futurePos - origin).Unit * (direction.Magnitude > 0 and direction.Magnitude or 1000)
                         args[2] = newDir
                         return OldNamecall(self, unpack(args))
                     end
                     
                 elseif method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRayWithWhitelist" or method == "FindPartOnRay" then
                     local ray = args[1]
-                    if typeof(ray) == "Ray" and ray.Direction.Magnitude > 20 then
+                    if typeof(ray) == "Ray" then
                         local origin = ray.Origin
-                        local targetPos = _G.LockedTarget.Head.Position
-                        args[1] = Ray.new(origin, (targetPos - origin).Unit * ray.Direction.Magnitude)
+                        args[1] = Ray.new(origin, (futurePos - origin).Unit * (ray.Direction.Magnitude > 0 and ray.Direction.Magnitude or 1000))
                         return OldNamecall(self, unpack(args))
                     end
                 end
@@ -472,10 +478,11 @@ if hookmetamethod then
     local OldIndex
     OldIndex = hookmetamethod(game, "__index", function(self, key)
         if not checkcaller() and Settings.SilentAim then
-            if _G.LockedTarget and _G.LockedTarget:FindFirstChild("Head") then
+            if _G.LockedTarget and _G.LockedTarget:FindFirstChild("Head") and _G.LockedTarget:FindFirstChild("HumanoidRootPart") then
                 if typeof(self) == "Instance" and self:IsA("Mouse") then
+                    local futurePos = _G.LockedTarget.Head.Position + (_G.LockedTarget.HumanoidRootPart.Velocity * Settings.Prediction)
                     if key == "Hit" then
-                        return _G.LockedTarget.Head.CFrame
+                        return CFrame.new(futurePos)
                     elseif key == "Target" then
                         return _G.LockedTarget.Head
                     end
