@@ -1,5 +1,5 @@
 -- ==========================================
--- MUMU PRO (V52) - 全局動態監控版 (功能開關記錄)
+-- MUMU PRO (V53) - 終極穩定完美版 (無BUG全整合)
 -- ==========================================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -9,24 +9,18 @@ local HttpService = game:GetService("HttpService")
 local Camera = workspace.CurrentCamera
 local LocalPlayer = Players.LocalPlayer
 
--- ⚡ [1. 終極動態監控系統 (Discord Webhook)] ⚡
--- ⚡ [1. 終極動態監控系統 (Discord Webhook 防封鎖版)] ⚡
--- ⚠️ 這裡貼上你原本的 Discord Webhook 網址
-local WebhookURL = "https://discord.com/api/webhooks/1495383967069900810/R-S8XYkHtWG_9ZrYNL5Kj2p43aV2C6Ac_QoyWa8OAR1PEH8aMfdnWnELjf--rzwbAH_7" 
+-- ⚡ [1. 終極動態監控系統 (Webhook 防封鎖)] ⚡
+local WebhookURL = "https://discord.com/api/webhooks/1495383967069900810/R-S8XYkHtWG_9ZrYNL5Kj2p43aV2C6Ac_QoyWa8OAR1PEH8aMfdnWnELjf--rzwbAH_7" -- ⚠️ 在這裡貼上你的 Webhook 網址
 
--- 🚀 核心破解：使用國外開源的 Webhook 代理伺服器，繞過 Discord 對 Roblox 外掛的封鎖
-WebhookURL = string.gsub(WebhookURL, "discord.com", "webhook.lewisakura.moe")
-
-local lastWebhookTime = 0 -- 記錄上次發送的時間
-
+local lastWebhookTime = 0
 local function SendWebhookLog(title, desc, colorHex)
     if WebhookURL == "" or WebhookURL == "YOUR_WEBHOOK_URL_HERE" then return end
-    
-    -- 🚀 防刷屏冷卻系統：2 秒內只能發送一次，避免被 Discord 判定為惡意攻擊
-    if tick() - lastWebhookTime < 2 then return end
+    if tick() - lastWebhookTime < 2 then return end -- 防刷屏冷卻 (2秒)
     lastWebhookTime = tick()
-
+    
+    local safeURL = string.gsub(WebhookURL, "discord.com", "webhook.lewisakura.moe")
     local req = http_request or request or HttpPost or (syn and syn.request)
+    
     if req then
         local data = {
             embeds = {{
@@ -36,35 +30,22 @@ local function SendWebhookLog(title, desc, colorHex)
                 footer = {text = "MUMU Security System | " .. os.date("%Y-%m-%d %H:%M:%S")}
             }}
         }
-        -- 使用 task.spawn 背景執行，防止發送訊息時卡頓遊戲
         task.spawn(function()
             pcall(function() 
-                req({
-                    Url = WebhookURL, 
-                    Method = "POST", 
-                    Headers = {["Content-Type"] = "application/json"}, 
-                    Body = HttpService:JSONEncode(data)
-                }) 
+                req({Url = safeURL, Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = HttpService:JSONEncode(data)}) 
             end)
         end)
     end
 end
 
--- 記錄腳本首次執行
+-- 記錄執行
 SendWebhookLog(
-    "💉 MUMU PRO 腳本被注射執行了！", 
-    "👤 **玩家:** " .. LocalPlayer.Name .. " (" .. LocalPlayer.UserId .. ")\n🎮 **遊戲 ID:** " .. game.PlaceId .. "\n🔗 **伺服器:** " .. game.JobId, 
+    "💉 MUMU PRO 腳本載入成功！", 
+    "👤 **玩家:** " .. LocalPlayer.Name .. "\n🆔 **ID:** " .. LocalPlayer.UserId .. "\n🎮 **遊戲:** " .. game.PlaceId, 
     9214928
 )
 
--- 記錄腳本首次執行
-SendWebhookLog(
-    "💉 MUMU PRO 腳本被注射執行了！", 
-    "👤 **玩家:** " .. LocalPlayer.Name .. " (" .. LocalPlayer.UserId .. ")\n🎮 **遊戲 ID:** " .. game.PlaceId .. "\n🔗 **伺服器:** " .. game.JobId, 
-    9214928
-)
-
--- ⚡ [2. 核心防禦與變數] ⚡
+-- ⚡ [2. 核心防禦與變數清空] ⚡
 if _G.MUMU_CONN then _G.MUMU_CONN:Disconnect() end
 if _G.MUMU_NOCLIP then _G.MUMU_NOCLIP:Disconnect() end
 if _G.MUMU_DRAWINGS then for _, d in pairs(_G.MUMU_DRAWINGS) do pcall(function() d.Box:Remove(); d.HealthBg:Remove(); d.HealthBar:Remove() end) end end
@@ -75,14 +56,14 @@ RunService.RenderStepped:Connect(function(dt) _G.CurrentDT = dt end)
 local Whitelisted = {}
 local Settings = {
     ESP = true, TeamESP = true, ConstantBox = true, HealthBar = true,
-    Aimbot = false, SilentAim = false, TriggerBot = false, AutoFireADS = false, RageAutoClick = false,
-    WallCheck = true, Fly = false, FlySpeed = 100, Noclip = false, InfJump = false, SpeedHack = false, WalkSpeed = 100,
-    UseDynamicPred = true, BulletSpeed = 3500, PingComp = 0.05, StaticPred = 0.12,
-    FOV = 250, MaxDistance = 500, AimbotSens = 1.0, StickyAim = true, RageSnap = false
+    Aimbot = false, WallCheck = true, TriggerBot = false, AimbotSens = 1.0, FOV = 250, StickyAim = true, 
+    SilentAim = false, RageAutoClick = false, UseDynamicPred = true, BulletSpeed = 3500, RageSnap = false, 
+    Fly = false, FlySpeed = 100, Noclip = false, InfJump = false, SpeedHack = false, WalkSpeed = 100,
+    PingComp = 0.05, StaticPred = 0.12, MaxDistance = 500
 }
 local CurrentStickyTarget = nil
 
--- ⚡ [3. 遊戲邏輯與防崩潰函式] ⚡
+-- ⚡ [3. 遊戲邏輯與防崩潰] ⚡
 local function ToggleNoclip(state)
     if state then
         _G.MUMU_NOCLIP = RunService.Stepped:Connect(function()
@@ -124,16 +105,20 @@ local function GetPred(tChar)
     else return hp + (vel * Settings.StaticPred) end
 end
 
--- ⚡ [4. 現代化 UI 引擎] ⚡
+local function IsVisible(tChar)
+    if not Settings.WallCheck or not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("Head") then return true end
+    local r = workspace:Raycast(Camera.CFrame.Position, tChar.Head.Position - Camera.CFrame.Position, RaycastParams.new({FilterType = Enum.RaycastFilterType.Exclude, FilterDescendantsInstances = {LocalPlayer.Character, Camera}, IgnoreWater = true}))
+    return r and r.Instance:IsDescendantOf(tChar) or not r
+end
+
+-- ⚡ [4. UI 生成 (完全中文化、防報錯)] ⚡
 local SafeGui = (gethui and gethui()) or game:GetService("CoreGui")
 if SafeGui:FindFirstChild("MUMU_UI") then SafeGui.MUMU_UI:Destroy() end
 
 local SG = Instance.new("ScreenGui", SafeGui); SG.Name = "MUMU_UI"; SG.ResetOnSpawn = false
 local Main = Instance.new("Frame", SG); Main.Size = UDim2.fromOffset(580, 420); Main.Position = UDim2.fromScale(0.5, 0.5); Main.AnchorPoint = Vector2.new(0.5, 0.5); Main.BackgroundColor3 = Color3.fromRGB(17, 18, 20); Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 8); Instance.new("UIStroke", Main).Color = Color3.fromRGB(26, 29, 37); Instance.new("UIStroke", Main).Thickness = 1.5
-
 local Title = Instance.new("TextLabel", Main); Title.Size = UDim2.new(1, 0, 0, 50); Title.Position = UDim2.new(0, 20, 0, 0); Title.Text = "MUMU PRO"; Title.TextColor3 = Color3.new(1,1,1); Title.FontFace = Font.new("rbxasset://fonts/families/Nunito.json", Enum.FontWeight.Bold); Title.TextSize = 22; Title.BackgroundTransparency = 1; Title.TextXAlignment = Enum.TextXAlignment.Left
-
-local Sidebar = Instance.new("Frame", Main); Sidebar.Size = UDim2.new(0, 140, 1, -60); Sidebar.Position = UDim2.new(0, 10, 0, 50); Sidebar.BackgroundTransparency = 1; Instance.new("UIListLayout", Sidebar).Padding = UDim.new(0, 6); Instance.new("UIListLayout", Sidebar).HorizontalAlignment = Enum.HorizontalAlignment.Center
+local Sidebar = Instance.new("Frame", Main); Sidebar.Size = UDim2.new(0, 140, 1, -60); Sidebar.Position = UDim2.new(0, 10, 0, 50); Sidebar.BackgroundTransparency = 1; Instance.new("UIListLayout", Sidebar).Padding = UDim.new(0, 6)
 local ContentArea = Instance.new("Frame", Main); ContentArea.Size = UDim2.new(1, -160, 1, -60); ContentArea.Position = UDim2.new(0, 150, 0, 50); ContentArea.BackgroundTransparency = 1
 
 local Tabs = {}
@@ -150,16 +135,10 @@ local function CreateToggle(parent, name, key, callback)
     local lbl = Instance.new("TextLabel", frame); lbl.Size = UDim2.new(0.8, 0, 1, 0); lbl.Position = UDim2.new(0, 15, 0, 0); lbl.Text = name; lbl.TextColor3 = Color3.new(1,1,1); lbl.FontFace = Font.new("rbxasset://fonts/families/Nunito.json"); lbl.TextSize = 14; lbl.BackgroundTransparency = 1; lbl.TextXAlignment = Enum.TextXAlignment.Left
     local btn = Instance.new("TextButton", frame); btn.Size = UDim2.new(0, 44, 0, 22); btn.Position = UDim2.new(1, -60, 0.5, -11); btn.Text = ""; Instance.new("UICorner", btn).CornerRadius = UDim.new(1, 0)
     local function update() if Settings[key] then btn.BackgroundColor3 = Color3.fromRGB(140, 155, 208) else btn.BackgroundColor3 = Color3.fromRGB(60, 60, 65) end end
-    update()
-    btn.MouseButton1Click:Connect(function() 
-        Settings[key] = not Settings[key]
-        update()
-        
-        -- 🚀 新增：玩家點擊開關時，發送 Webhook 記錄
+    update(); btn.MouseButton1Click:Connect(function() 
+        Settings[key] = not Settings[key]; update()
         local stateText = Settings[key] and "🟢 開啟" or "🔴 關閉"
-        local stateColor = Settings[key] and 5763719 or 15548997 -- 綠色 或 紅色
-        SendWebhookLog("⚙️ 功能切換通知", "👤 **" .. LocalPlayer.Name .. "** 將 **[" .. name .. "]** 狀態設為 **" .. stateText .. "**", stateColor)
-
+        SendWebhookLog("⚙️ 開關操作", "👤 **" .. LocalPlayer.Name .. "** 將 **[" .. name .. "]** 設為 " .. stateText, Settings[key] and 5763719 or 15548997)
         if callback then callback(Settings[key]) end 
     end)
 end
@@ -193,7 +172,7 @@ CreateSlider(TabRage, "預判子彈速度", "BulletSpeed", 500, 5000)
 local TabVisuals = CreateTab("👁️ 透視 (Visuals)", false)
 CreateToggle(TabVisuals, "啟用透視 (ESP)", "ESP")
 CreateToggle(TabVisuals, "恆定方框 (Constant Box)", "ConstantBox")
-CreateToggle(TabVisuals, "顯示血條 (Health Bar)", "HealthBar")
+CreateToggle(TabVisuals, "顯示綠色血條 (Health Bar)", "HealthBar")
 CreateToggle(TabVisuals, "隊友透視 (Team ESP)", "TeamESP")
 
 local TabPlayer = CreateTab("🏃 玩家 (Player)", false)
@@ -213,10 +192,8 @@ RunService.RenderStepped:Connect(function() if draggingUI and dragInput then loc
 
 UIS.InputBegan:Connect(function(i, gp) 
     if not gp and i.KeyCode == Enum.KeyCode.J then 
-        Main.Visible = not Main.Visible 
-        -- 🚀 新增：玩家隱藏/呼出 UI 時發送通知
-        local uiState = Main.Visible and "👁️ 顯示" or "👻 隱藏"
-        SendWebhookLog("💻 介面狀態改變", "👤 **" .. LocalPlayer.Name .. "** 按下了 J 鍵，將介面設為 **" .. uiState .. "**", 3447003)
+        Main.Visible = not Main.Visible
+        SendWebhookLog("💻 介面狀態改變", "👤 **" .. LocalPlayer.Name .. "** 將介面設為: " .. (Main.Visible and "👁️ 顯示" or "👻 隱藏"), 3447003)
     end 
 end)
 
@@ -227,24 +204,24 @@ UIS.InputBegan:Connect(function(i, gp)
         for _, p in pairs(Players:GetPlayers()) do if p~=LocalPlayer and p.Character and p.Character:FindFirstChild("Head") then local pos, os = Camera:WorldToViewportPoint(p.Character.Head.Position); if os then local d = (Vector2.new(pos.X, pos.Y)-ctr).Magnitude; if d<md then md=d; c=p end end end end
         if c then Whitelisted[c.UserId] = not Whitelisted[c.UserId] end
     end
-end)
-
-UIS.InputBegan:Connect(function(i, gp)
-    if not gp and i.UserInputType == Enum.UserInputType.MouseButton1 then
-        if Settings.RageSnap then
-            local closest, md = nil, math.huge
-            for _, p in pairs(Players:GetPlayers()) do
-                local hp, _ = GetHealth(p.Character)
-                if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") and hp > 0 and not IsTeammate(p) and IsVisible(p.Character) then
-                    local d = (Camera.CFrame.Position - p.Character.Head.Position).Magnitude
-                    if d < md then md = d; closest = p.Character end
-                end
+    -- Snap Aim (瞬間甩槍)
+    if not gp and i.UserInputType == Enum.UserInputType.MouseButton1 and Settings.RageSnap then
+        local closest, md = nil, math.huge
+        for _, p in pairs(Players:GetPlayers()) do
+            local hp, _ = GetHealth(p.Character)
+            if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") and hp > 0 and not IsTeammate(p) and IsVisible(p.Character) then
+                local d = (Camera.CFrame.Position - p.Character.Head.Position).Magnitude
+                if d < md then md = d; closest = p.Character end
             end
-            if closest then Camera.CFrame = CFrame.new(Camera.CFrame.Position, GetPred(closest) or closest.Head.Position) end
         end
+        if closest then Camera.CFrame = CFrame.new(Camera.CFrame.Position, GetPred(closest) or closest.Head.Position) end
     end
 end)
 
+-- 無限跳躍
+UIS.JumpRequest:Connect(function() if Settings.InfJump and LocalPlayer.Character then local hum = LocalPlayer.Character:FindFirstChild("Humanoid"); if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end end end)
+
+-- 魔術子彈
 if hookmetamethod then
     local OldNC = hookmetamethod(game, "__namecall", function(self, ...)
         local m = getnamecallmethod(); local a = {...}
@@ -268,6 +245,7 @@ if hookmetamethod then
     end)
 end
 
+-- 玩家退出時清除 ESP 殘影
 Players.PlayerRemoving:Connect(function(plr)
     if _G.MUMU_DRAWINGS and _G.MUMU_DRAWINGS[plr] then pcall(function() _G.MUMU_DRAWINGS[plr].Box:Remove(); _G.MUMU_DRAWINGS[plr].HealthBg:Remove(); _G.MUMU_DRAWINGS[plr].HealthBar:Remove() end); _G.MUMU_DRAWINGS[plr] = nil end
     Whitelisted[plr.UserId] = nil
@@ -280,7 +258,7 @@ local FlyBodyGyro, FlyBodyVelocity, CONTROL = nil, nil, {F=0, B=0, L=0, R=0, UP=
 UIS.InputBegan:Connect(function(i, gp) if not gp then local k=i.KeyCode; if k==Enum.KeyCode.W then CONTROL.F=1 elseif k==Enum.KeyCode.S then CONTROL.B=-1 elseif k==Enum.KeyCode.A then CONTROL.L=-1 elseif k==Enum.KeyCode.D then CONTROL.R=1 elseif k==Enum.KeyCode.Space then CONTROL.UP=1 elseif k==Enum.KeyCode.LeftControl then CONTROL.DOWN=-1 end end end)
 UIS.InputEnded:Connect(function(i) local k=i.KeyCode; if k==Enum.KeyCode.W then CONTROL.F=0 elseif k==Enum.KeyCode.S then CONTROL.B=0 elseif k==Enum.KeyCode.A then CONTROL.L=0 elseif k==Enum.KeyCode.D then CONTROL.R=0 elseif k==Enum.KeyCode.Space then CONTROL.UP=0 elseif k==Enum.KeyCode.LeftControl then CONTROL.DOWN=0 end end)
 
--- ⚡ [6. 高頻渲染核心] ⚡
+-- ⚡ [6. 高頻渲染核心 (ESP與自瞄)] ⚡
 _G.MUMU_CONN = RunService.RenderStepped:Connect(function()
     if LocalPlayer.Character then
         if Settings.Fly and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
@@ -295,6 +273,7 @@ _G.MUMU_CONN = RunService.RenderStepped:Connect(function()
         if Settings.SpeedHack and LocalPlayer.Character:FindFirstChild("Humanoid") then LocalPlayer.Character.Humanoid.WalkSpeed = Settings.WalkSpeed end
     end
 
+    -- 綠色血條與恆定方框
     for _, p in pairs(Players:GetPlayers()) do
         if p ~= LocalPlayer then
             if not _G.MUMU_DRAWINGS[p] then _G.MUMU_DRAWINGS[p] = { Box = Drawing.new("Square"), HealthBg = Drawing.new("Line"), HealthBar = Drawing.new("Line") }; local d = _G.MUMU_DRAWINGS[p]; d.Box.Color = Color3.fromRGB(255, 50, 50); d.Box.Thickness = 1.5; d.Box.Filled = false; d.HealthBg.Color = Color3.fromRGB(0,0,0); d.HealthBg.Thickness = 4; d.HealthBar.Thickness = 2 end
@@ -330,6 +309,7 @@ _G.MUMU_CONN = RunService.RenderStepped:Connect(function()
         end
     end
 
+    -- 黏性瞄準 (Sticky Aim)
     if Settings.Aimbot then
         if Settings.StickyAim and CurrentStickyTarget then
             local hp, _ = GetHealth(CurrentStickyTarget)
