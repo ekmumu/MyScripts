@@ -1,5 +1,5 @@
 -- ==========================================
--- MUMU PRO (V44) - 暴力死鎖 + 預判導航拐彎版
+-- MUMU PRO (V45) - 魔術子彈 360度追蹤版
 -- ==========================================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -30,7 +30,7 @@ local WhitelistedPlayers = {}
 local Settings = {
     ESP = true,
     Aimbot = true,        
-    SilentAim = false,    
+    SilentAim = false,    -- ⚡ 360度魔術子彈
     TriggerBot = false,   
     TriggerRadius = 15,   
     AutoFire_ADS = false, 
@@ -42,10 +42,10 @@ local Settings = {
     InfJump = false,      
     SpeedHack = false,    
     WalkSpeed = 100,      
-    Prediction = 0.15,    -- ⚡ 預設提高預判
+    Prediction = 0.15,    
     FOV = 250,         
     MaxDistance = 350,
-    AimbotSens = 1.0      -- ⚡ 預設改為 1.0 (瞬間死鎖)
+    AimbotSens = 1.0      
 }
 
 -- [[ 1. UI 介面建立 ]]
@@ -242,7 +242,7 @@ end
 
 -- UI 生成
 AddToggle("方框與血條 (ESP)", "ESP")
-AddToggle("暴力拐彎 (Silent Aim)", "SilentAim") 
+AddToggle("360度魔術子彈 (Magic Aim)", "SilentAim") 
 AddToggle("死鎖瞄準 (Aimbot)", "Aimbot") 
 AddToggle("自動扳機 (TriggerBot)", "TriggerBot") 
 AddToggle("自動鎖頭+開火 (開鏡)", "AutoFire_ADS") 
@@ -253,7 +253,6 @@ AddToggle("穿牆模式 (Noclip)", "Noclip", UpdateNoclipState)
 AddToggle("無限跳躍 (Inf Jump)", "InfJump") 
 AddToggle("解鎖跑速 (Speed)", "SpeedHack") 
 
--- ⚡ 新增預判拉桿
 AddAdjuster("預判補償(打飛天掛調高)", "Prediction", 0.01, 0.0, 0.5)
 AddAdjuster("鎖頭推力(預設1.0為死鎖)", "AimbotSens", 0.1, 0.1, 2.0)
 AddAdjuster("跑速設定", "WalkSpeed", 10, 16, 500)
@@ -439,7 +438,7 @@ local function GetHealth(char)
     return hp, maxHp
 end
 
--- ⚡ 終極強化子彈拐彎 (加入預判補償、解除長度限制)
+-- ⚡ 終極 360 度魔術子彈攔截器
 if hookmetamethod then
     local OldNamecall
     OldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
@@ -447,10 +446,9 @@ if hookmetamethod then
         local args = {...}
         
         if not checkcaller() and Settings.SilentAim then
-            if _G.LockedTarget and _G.LockedTarget:FindFirstChild("Head") and _G.LockedTarget:FindFirstChild("HumanoidRootPart") then
+            if _G.SilentTarget and _G.SilentTarget:FindFirstChild("Head") and _G.SilentTarget:FindFirstChild("HumanoidRootPart") then
                 
-                -- 計算敵人的未來位置 (套用面板上的 Prediction 拉桿)
-                local futurePos = _G.LockedTarget.Head.Position + (_G.LockedTarget.HumanoidRootPart.Velocity * Settings.Prediction)
+                local futurePos = _G.SilentTarget.Head.Position + (_G.SilentTarget.HumanoidRootPart.Velocity * Settings.Prediction)
 
                 if method == "Raycast" and self == workspace then
                     local origin = args[1]
@@ -478,13 +476,13 @@ if hookmetamethod then
     local OldIndex
     OldIndex = hookmetamethod(game, "__index", function(self, key)
         if not checkcaller() and Settings.SilentAim then
-            if _G.LockedTarget and _G.LockedTarget:FindFirstChild("Head") and _G.LockedTarget:FindFirstChild("HumanoidRootPart") then
+            if _G.SilentTarget and _G.SilentTarget:FindFirstChild("Head") and _G.SilentTarget:FindFirstChild("HumanoidRootPart") then
                 if typeof(self) == "Instance" and self:IsA("Mouse") then
-                    local futurePos = _G.LockedTarget.Head.Position + (_G.LockedTarget.HumanoidRootPart.Velocity * Settings.Prediction)
+                    local futurePos = _G.SilentTarget.Head.Position + (_G.SilentTarget.HumanoidRootPart.Velocity * Settings.Prediction)
                     if key == "Hit" then
                         return CFrame.new(futurePos)
                     elseif key == "Target" then
-                        return _G.LockedTarget.Head
+                        return _G.SilentTarget.Head
                     end
                 end
             end
@@ -493,7 +491,6 @@ if hookmetamethod then
     end)
 end
 
--- ⚡ 高頻渲染循環 (Noclip與跑速控制)
 RunService.Stepped:Connect(function()
     if Settings.Noclip then
         if LocalPlayer.Character then
@@ -625,6 +622,7 @@ local function FireWeapon()
     end
 end
 
+-- ⚡ 找尋視角內的目標 (給滑鼠自瞄用)
 local function FindNewTarget()
     local target = nil
     local maxDist = Settings.FOV
@@ -634,7 +632,6 @@ local function FindNewTarget()
         local hp, _ = GetHealth(p.Character)
         
         if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") and p.Character:FindFirstChild("HumanoidRootPart") and hp > 0 then
-            
             if not IsTeammate(p) then
                 local distToPlayer = (Camera.CFrame.Position - p.Character.HumanoidRootPart.Position).Magnitude
                 if distToPlayer <= Settings.MaxDistance then
@@ -646,6 +643,32 @@ local function FindNewTarget()
                                 maxDist = dist
                                 target = p.Character 
                             end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return target
+end
+
+-- ⚡ 找尋 3D 空間中最近的目標 (給 360 度魔術子彈專用)
+local function FindSilentAimTarget()
+    local target = nil
+    local shortestDist = Settings.MaxDistance
+    
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        local myPos = LocalPlayer.Character.HumanoidRootPart.Position
+        for _, p in pairs(Players:GetPlayers()) do
+            local hp, _ = GetHealth(p.Character)
+            
+            if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") and p.Character:FindFirstChild("HumanoidRootPart") and hp > 0 then
+                if not IsTeammate(p) then
+                    if IsVisible(p.Character) then
+                        local dist = (myPos - p.Character.HumanoidRootPart.Position).Magnitude
+                        if dist < shortestDist then
+                            shortestDist = dist
+                            target = p.Character
                         end
                     end
                 end
@@ -687,12 +710,18 @@ _G.MUMU_PRO_CONNECTION = RunService.RenderStepped:Connect(function()
 
     local isRightClicking = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
     
-    if Settings.Aimbot or Settings.AutoFire_Hip or Settings.AutoFire_ADS or Settings.TriggerBot or Settings.SilentAim then
+    -- ⚡ 獨立更新 360 度目標給子彈拐彎使用
+    if Settings.SilentAim then
+        _G.SilentTarget = FindSilentAimTarget()
+    else
+        _G.SilentTarget = nil
+    end
+    
+    -- ⚡ 更新視角目標給滑鼠死鎖與自動開火使用
+    if Settings.Aimbot or Settings.AutoFire_Hip or Settings.AutoFire_ADS or Settings.TriggerBot then
         if not LockedTarget then 
             LockedTarget = FindNewTarget() 
         end
-        
-        _G.LockedTarget = LockedTarget 
 
         local hp, _ = GetHealth(LockedTarget)
         
@@ -702,7 +731,6 @@ _G.MUMU_PRO_CONNECTION = RunService.RenderStepped:Connect(function()
             
             if distFromTarget > Settings.MaxDistance or not IsVisible(LockedTarget) then 
                 LockedTarget = nil
-                _G.LockedTarget = nil
                 return 
             end
 
@@ -755,15 +783,12 @@ _G.MUMU_PRO_CONNECTION = RunService.RenderStepped:Connect(function()
                 end
             else 
                 LockedTarget = nil
-                _G.LockedTarget = nil
             end
         else 
             LockedTarget = nil
-            _G.LockedTarget = nil
         end
     else 
         LockedTarget = nil
-        _G.LockedTarget = nil
     end
 end)
 
@@ -794,7 +819,6 @@ Players.PlayerRemoving:Connect(function(plr)
     if LockedTarget then
         if LockedTarget.Name == plr.Name then 
             LockedTarget = nil
-            _G.LockedTarget = nil
         end
     end
 end)
