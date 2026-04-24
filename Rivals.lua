@@ -1,5 +1,5 @@
 -- ==========================================
--- MUMU PRO (V53) - 終極穩定完美版 (無BUG全整合)
+-- MUMU PRO (V54) - 極致效能優化版 (不掉幀)
 -- ==========================================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -9,13 +9,13 @@ local HttpService = game:GetService("HttpService")
 local Camera = workspace.CurrentCamera
 local LocalPlayer = Players.LocalPlayer
 
--- ⚡ [1. 終極動態監控系統 (Webhook 防封鎖)] ⚡
+-- ⚡ [1. 終極動態監控系統] ⚡
 local WebhookURL = "https://discord.com/api/webhooks/1495383967069900810/R-S8XYkHtWG_9ZrYNL5Kj2p43aV2C6Ac_QoyWa8OAR1PEH8aMfdnWnELjf--rzwbAH_7" -- ⚠️ 在這裡貼上你的 Webhook 網址
 
 local lastWebhookTime = 0
 local function SendWebhookLog(title, desc, colorHex)
     if WebhookURL == "" or WebhookURL == "YOUR_WEBHOOK_URL_HERE" then return end
-    if tick() - lastWebhookTime < 2 then return end -- 防刷屏冷卻 (2秒)
+    if tick() - lastWebhookTime < 2 then return end 
     lastWebhookTime = tick()
     
     local safeURL = string.gsub(WebhookURL, "discord.com", "webhook.lewisakura.moe")
@@ -24,28 +24,17 @@ local function SendWebhookLog(title, desc, colorHex)
     if req then
         local data = {
             embeds = {{
-                title = title,
-                description = desc,
-                color = colorHex or 9214928,
+                title = title, description = desc, color = colorHex or 9214928,
                 footer = {text = "MUMU Security System | " .. os.date("%Y-%m-%d %H:%M:%S")}
             }}
         }
-        task.spawn(function()
-            pcall(function() 
-                req({Url = safeURL, Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = HttpService:JSONEncode(data)}) 
-            end)
-        end)
+        task.spawn(function() pcall(function() req({Url = safeURL, Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = HttpService:JSONEncode(data)}) end) end)
     end
 end
 
--- 記錄執行
-SendWebhookLog(
-    "💉 MUMU PRO 腳本載入成功！", 
-    "👤 **玩家:** " .. LocalPlayer.Name .. "\n🆔 **ID:** " .. LocalPlayer.UserId .. "\n🎮 **遊戲:** " .. game.PlaceId, 
-    9214928
-)
+SendWebhookLog("💉 MUMU PRO 腳本載入成功！", "👤 **玩家:** " .. LocalPlayer.Name .. "\n🆔 **ID:** " .. LocalPlayer.UserId .. "\n🎮 **遊戲:** " .. game.PlaceId, 9214928)
 
--- ⚡ [2. 核心防禦與變數清空] ⚡
+-- ⚡ [2. 核心防禦與變數] ⚡
 if _G.MUMU_CONN then _G.MUMU_CONN:Disconnect() end
 if _G.MUMU_NOCLIP then _G.MUMU_NOCLIP:Disconnect() end
 if _G.MUMU_DRAWINGS then for _, d in pairs(_G.MUMU_DRAWINGS) do pcall(function() d.Box:Remove(); d.HealthBg:Remove(); d.HealthBar:Remove() end) end end
@@ -63,7 +52,7 @@ local Settings = {
 }
 local CurrentStickyTarget = nil
 
--- ⚡ [3. 遊戲邏輯與防崩潰] ⚡
+-- ⚡ [3. 遊戲邏輯 (效能優化版)] ⚡
 local function ToggleNoclip(state)
     if state then
         _G.MUMU_NOCLIP = RunService.Stepped:Connect(function()
@@ -75,11 +64,19 @@ local function ToggleNoclip(state)
     end
 end
 
+-- 拔除 pcall，改用安全路徑檢索，大幅提升效能
 local function IsTeammate(p)
     if p == LocalPlayer or Whitelisted[p.UserId] then return true end
     if not Settings.TeamESP then return false end
-    local s, r = pcall(function() return p:FindFirstChild("ClientData").Team.Value == LocalPlayer:FindFirstChild("ClientData").Team.Value end)
-    return s and r or false
+    
+    local lpData = LocalPlayer:FindFirstChild("ClientData")
+    local pData = p:FindFirstChild("ClientData")
+    if lpData and pData then
+        local lpTeam = lpData:FindFirstChild("Team")
+        local pTeam = pData:FindFirstChild("Team")
+        if lpTeam and pTeam and lpTeam.Value == pTeam.Value then return true end
+    end
+    return false
 end
 
 local function GetHealth(c)
@@ -111,7 +108,7 @@ local function IsVisible(tChar)
     return r and r.Instance:IsDescendantOf(tChar) or not r
 end
 
--- ⚡ [4. UI 生成 (完全中文化、防報錯)] ⚡
+-- ⚡ [4. UI 生成 (完全中文化)] ⚡
 local SafeGui = (gethui and gethui()) or game:GetService("CoreGui")
 if SafeGui:FindFirstChild("MUMU_UI") then SafeGui.MUMU_UI:Destroy() end
 
@@ -137,8 +134,7 @@ local function CreateToggle(parent, name, key, callback)
     local function update() if Settings[key] then btn.BackgroundColor3 = Color3.fromRGB(140, 155, 208) else btn.BackgroundColor3 = Color3.fromRGB(60, 60, 65) end end
     update(); btn.MouseButton1Click:Connect(function() 
         Settings[key] = not Settings[key]; update()
-        local stateText = Settings[key] and "🟢 開啟" or "🔴 關閉"
-        SendWebhookLog("⚙️ 開關操作", "👤 **" .. LocalPlayer.Name .. "** 將 **[" .. name .. "]** 設為 " .. stateText, Settings[key] and 5763719 or 15548997)
+        SendWebhookLog("⚙️ 開關操作", "👤 **" .. LocalPlayer.Name .. "** 將 **[" .. name .. "]** 設為 " .. (Settings[key] and "🟢 開啟" or "🔴 關閉"), Settings[key] and 5763719 or 15548997)
         if callback then callback(Settings[key]) end 
     end)
 end
@@ -197,14 +193,14 @@ UIS.InputBegan:Connect(function(i, gp)
     end 
 end)
 
--- ⚡ [5. 輸入與攔截系統] ⚡
+-- ⚡ [5. 輸入系統] ⚡
 UIS.InputBegan:Connect(function(i, gp)
     if not gp and (i.KeyCode == Enum.KeyCode.T or i.UserInputType == Enum.UserInputType.MouseButton3) then
         local c, md, ctr = nil, Settings.FOV, Camera.ViewportSize/2
         for _, p in pairs(Players:GetPlayers()) do if p~=LocalPlayer and p.Character and p.Character:FindFirstChild("Head") then local pos, os = Camera:WorldToViewportPoint(p.Character.Head.Position); if os then local d = (Vector2.new(pos.X, pos.Y)-ctr).Magnitude; if d<md then md=d; c=p end end end end
         if c then Whitelisted[c.UserId] = not Whitelisted[c.UserId] end
     end
-    -- Snap Aim (瞬間甩槍)
+    -- Snap Aim
     if not gp and i.UserInputType == Enum.UserInputType.MouseButton1 and Settings.RageSnap then
         local closest, md = nil, math.huge
         for _, p in pairs(Players:GetPlayers()) do
@@ -218,10 +214,8 @@ UIS.InputBegan:Connect(function(i, gp)
     end
 end)
 
--- 無限跳躍
 UIS.JumpRequest:Connect(function() if Settings.InfJump and LocalPlayer.Character then local hum = LocalPlayer.Character:FindFirstChild("Humanoid"); if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end end end)
 
--- 魔術子彈
 if hookmetamethod then
     local OldNC = hookmetamethod(game, "__namecall", function(self, ...)
         local m = getnamecallmethod(); local a = {...}
@@ -245,7 +239,6 @@ if hookmetamethod then
     end)
 end
 
--- 玩家退出時清除 ESP 殘影
 Players.PlayerRemoving:Connect(function(plr)
     if _G.MUMU_DRAWINGS and _G.MUMU_DRAWINGS[plr] then pcall(function() _G.MUMU_DRAWINGS[plr].Box:Remove(); _G.MUMU_DRAWINGS[plr].HealthBg:Remove(); _G.MUMU_DRAWINGS[plr].HealthBar:Remove() end); _G.MUMU_DRAWINGS[plr] = nil end
     Whitelisted[plr.UserId] = nil
@@ -258,7 +251,7 @@ local FlyBodyGyro, FlyBodyVelocity, CONTROL = nil, nil, {F=0, B=0, L=0, R=0, UP=
 UIS.InputBegan:Connect(function(i, gp) if not gp then local k=i.KeyCode; if k==Enum.KeyCode.W then CONTROL.F=1 elseif k==Enum.KeyCode.S then CONTROL.B=-1 elseif k==Enum.KeyCode.A then CONTROL.L=-1 elseif k==Enum.KeyCode.D then CONTROL.R=1 elseif k==Enum.KeyCode.Space then CONTROL.UP=1 elseif k==Enum.KeyCode.LeftControl then CONTROL.DOWN=-1 end end end)
 UIS.InputEnded:Connect(function(i) local k=i.KeyCode; if k==Enum.KeyCode.W then CONTROL.F=0 elseif k==Enum.KeyCode.S then CONTROL.B=0 elseif k==Enum.KeyCode.A then CONTROL.L=0 elseif k==Enum.KeyCode.D then CONTROL.R=0 elseif k==Enum.KeyCode.Space then CONTROL.UP=0 elseif k==Enum.KeyCode.LeftControl then CONTROL.DOWN=0 end end)
 
--- ⚡ [6. 高頻渲染核心 (ESP與自瞄)] ⚡
+-- ⚡ [6. 高頻渲染核心 (整合效能版)] ⚡
 _G.MUMU_CONN = RunService.RenderStepped:Connect(function()
     if LocalPlayer.Character then
         if Settings.Fly and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
@@ -273,39 +266,52 @@ _G.MUMU_CONN = RunService.RenderStepped:Connect(function()
         if Settings.SpeedHack and LocalPlayer.Character:FindFirstChild("Humanoid") then LocalPlayer.Character.Humanoid.WalkSpeed = Settings.WalkSpeed end
     end
 
-    -- 綠色血條與恆定方框
+    local isRC = UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
+    local myPos = Camera.CFrame.Position
+    _G.SilentTarget = nil
+    local mdA, mdS = Settings.FOV, Settings.MaxDistance
+    local foundNewTarget = nil
+
+    -- ⚡ 合併迴圈，大幅降低效能損耗
     for _, p in pairs(Players:GetPlayers()) do
         if p ~= LocalPlayer then
             if not _G.MUMU_DRAWINGS[p] then _G.MUMU_DRAWINGS[p] = { Box = Drawing.new("Square"), HealthBg = Drawing.new("Line"), HealthBar = Drawing.new("Line") }; local d = _G.MUMU_DRAWINGS[p]; d.Box.Color = Color3.fromRGB(255, 50, 50); d.Box.Thickness = 1.5; d.Box.Filled = false; d.HealthBg.Color = Color3.fromRGB(0,0,0); d.HealthBg.Thickness = 4; d.HealthBar.Thickness = 2 end
-            local d = _G.MUMU_DRAWINGS[p]; local hp, maxHp = GetHealth(p.Character)
-            if Settings.ESP and p.Character and p.Character:FindFirstChild("HumanoidRootPart") and hp > 0 and not IsTeammate(p) then
-                local hrp = p.Character.HumanoidRootPart; local topPos, onScreen = Camera:WorldToViewportPoint(hrp.Position + Vector3.new(0, 2.5, 0)); local bottomPos = Camera:WorldToViewportPoint(hrp.Position - Vector3.new(0, 3, 0)); local centerPos = Camera:WorldToViewportPoint(hrp.Position)
-                if onScreen and (hrp.Position - Camera.CFrame.Position).Magnitude < Settings.MaxDistance then
-                    local height, width; if Settings.ConstantBox then width, height = 30, 45 else height = math.abs(topPos.Y - bottomPos.Y); width = height * 0.6 end
-                    d.Box.Size = Vector2.new(width, height); d.Box.Position = Vector2.new(centerPos.X - width/2, centerPos.Y - height/2); d.Box.Visible = true
-                    if Settings.HealthBar then
-                        local pct = math.clamp(hp/maxHp, 0, 1); local barX, barYBottom, barYTop = centerPos.X - width/2 - 6, centerPos.Y + height/2, centerPos.Y - height/2
-                        d.HealthBg.From = Vector2.new(barX, barYBottom); d.HealthBg.To = Vector2.new(barX, barYTop); d.HealthBg.Visible = true
-                        d.HealthBar.From = Vector2.new(barX, barYBottom); d.HealthBar.To = Vector2.new(barX, barYBottom - (height * pct)); d.HealthBar.Color = Color3.fromRGB(50, 255, 50); d.HealthBar.Visible = true
-                    else d.HealthBg.Visible = false; d.HealthBar.Visible = false end
+            local d = _G.MUMU_DRAWINGS[p]
+            local char = p.Character
+            
+            if char and char:FindFirstChild("HumanoidRootPart") and char:FindFirstChild("Head") then
+                local hp, maxHp = GetHealth(char)
+                if hp > 0 and not IsTeammate(p) then
+                    local hrp = char.HumanoidRootPart
+                    local dist = (hrp.Position - myPos).Magnitude
+                    
+                    if dist < Settings.MaxDistance then
+                        local topPos, onScreen = Camera:WorldToViewportPoint(hrp.Position + Vector3.new(0, 2.5, 0))
+                        
+                        -- ESP 渲染
+                        if onScreen and Settings.ESP then
+                            local bottomPos = Camera:WorldToViewportPoint(hrp.Position - Vector3.new(0, 3, 0))
+                            local centerPos = Camera:WorldToViewportPoint(hrp.Position)
+                            local height, width; if Settings.ConstantBox then width, height = 30, 45 else height = math.abs(topPos.Y - bottomPos.Y); width = height * 0.6 end
+                            d.Box.Size = Vector2.new(width, height); d.Box.Position = Vector2.new(centerPos.X - width/2, centerPos.Y - height/2); d.Box.Visible = true
+                            if Settings.HealthBar then
+                                local pct = math.clamp(hp/maxHp, 0, 1); local barX, barYBottom, barYTop = centerPos.X - width/2 - 6, centerPos.Y + height/2, centerPos.Y - height/2
+                                d.HealthBg.From = Vector2.new(barX, barYBottom); d.HealthBg.To = Vector2.new(barX, barYTop); d.HealthBg.Visible = true
+                                d.HealthBar.From = Vector2.new(barX, barYBottom); d.HealthBar.To = Vector2.new(barX, barYBottom - (height * pct)); d.HealthBar.Color = Color3.fromRGB(50, 255, 50); d.HealthBar.Visible = true
+                            else d.HealthBg.Visible = false; d.HealthBar.Visible = false end
+                        else d.Box.Visible = false; d.HealthBg.Visible = false; d.HealthBar.Visible = false end
+                        
+                        -- 目標搜尋 (僅對活著且在距離內的敵人做 Raycast 檢測)
+                        if IsVisible(char) then
+                            if Settings.SilentAim and dist < mdS then mdS = dist; _G.SilentTarget = char end
+                            if Settings.Aimbot then
+                                local sp, os2 = Camera:WorldToViewportPoint(char.Head.Position)
+                                if os2 then local dCenter = (Vector2.new(sp.X, sp.Y) - Camera.ViewportSize/2).Magnitude; if dCenter < mdA then mdA = dCenter; foundNewTarget = char end end
+                            end
+                        end
+                    else d.Box.Visible = false; d.HealthBg.Visible = false; d.HealthBar.Visible = false end
                 else d.Box.Visible = false; d.HealthBg.Visible = false; d.HealthBar.Visible = false end
             else d.Box.Visible = false; d.HealthBg.Visible = false; d.HealthBar.Visible = false end
-        end
-    end
-
-    local isRC = UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
-    local myPos = Camera.CFrame.Position
-    _G.SilentTarget = nil; local mdA, mdS = Settings.FOV, Settings.MaxDistance; local foundNewTarget = nil
-
-    for _, p in pairs(Players:GetPlayers()) do
-        local hp, _ = GetHealth(p.Character)
-        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") and hp > 0 and not IsTeammate(p) and IsVisible(p.Character) then
-            local tPos = p.Character.Head.Position
-            if Settings.SilentAim and (tPos - myPos).Magnitude < mdS then mdS = (tPos - myPos).Magnitude; _G.SilentTarget = p.Character end
-            if Settings.Aimbot then
-                local sp, os = Camera:WorldToViewportPoint(tPos)
-                if os then local d = (Vector2.new(sp.X, sp.Y) - Camera.ViewportSize/2).Magnitude; if d < mdA then mdA = d; foundNewTarget = p.Character end end
-            end
         end
     end
 
