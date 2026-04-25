@@ -1,5 +1,5 @@
 -- ==========================================
--- MUMU PRO (V57) - 終極無掛礙版 (極限防崩潰)
+-- MUMU PRO (V58) - 鎖定強化與 FOV 視覺版
 -- ==========================================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -9,52 +9,49 @@ local HttpService = game:GetService("HttpService")
 local Camera = workspace.CurrentCamera
 local LocalPlayer = Players.LocalPlayer
 
--- ⚡ [局部變數快取 (提升效能)] ⚡
+-- ⚡ [局部變數快取] ⚡
 local v2new, v3new = Vector2.new, Vector3.new
 local math_clamp, math_abs, math_huge = math.clamp, math.abs, math.huge
 
 -- ⚡ [1. 智能動態監控系統] ⚡
--- ⚠️ 只有這裡需要你手動設定：把你的 Discord 網址貼在雙引號內。不填也不會報錯！
-local WebhookURL = "https://discord.com/api/webhooks/1495383967069900810/R-S8XYkHtWG_9ZrYNL5Kj2p43aV2C6Ac_QoyWa8OAR1PEH8aMfdnWnELjf--rzwbAH_7" 
+local WebhookURL = "https://discord.com/api/webhooks/1495383967069900810/R-S8XYkHtWG_9ZrYNL5Kj2p43aV2C6Ac_QoyWa8OAR1PEH8aMfdnWnELjf--rzwbAH_7" -- ⚠️ 你的 Discord Webhook 網址
 
 local lastWebhookTime = 0
 local function SendWebhookLog(title, desc, colorHex)
     if typeof(WebhookURL) ~= "string" or WebhookURL == "" or string.find(WebhookURL, "YOUR_WEBHOOK") then return end
     if tick() - lastWebhookTime < 2 then return end 
     lastWebhookTime = tick()
-    
     local safeURL = string.gsub(WebhookURL, "discord%.com", "webhook.lewisakura.moe")
     local req = http_request or request or HttpPost or (syn and syn.request)
-    
     if req then
-        local data = {
-            embeds = {{
-                title = title, description = desc, color = colorHex or 9214928,
-                footer = {text = "MUMU Security System | " .. os.date("%Y-%m-%d %H:%M:%S")}
-            }}
-        }
-        task.spawn(function() 
-            pcall(function() 
-                req({Url = safeURL, Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = HttpService:JSONEncode(data)}) 
-            end) 
-        end)
+        local data = { embeds = {{ title = title, description = desc, color = colorHex or 9214928, footer = {text = "MUMU Security System | " .. os.date("%Y-%m-%d %H:%M:%S")} }} }
+        task.spawn(function() pcall(function() req({Url = safeURL, Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = HttpService:JSONEncode(data)}) end) end)
     end
 end
+SendWebhookLog("💉 MUMU PRO [V58] 鎖定強化版載入", "👤 **玩家:** " .. LocalPlayer.Name .. "\n🆔 **ID:** " .. LocalPlayer.UserId, 9214928)
 
-SendWebhookLog("💉 MUMU PRO [V57] 完美版載入", "👤 **玩家:** " .. LocalPlayer.Name .. "\n🆔 **ID:** " .. LocalPlayer.UserId, 9214928)
-
--- ⚡ [2. 核心變數與清理] ⚡
+-- ⚡ [2. 核心清理與變數] ⚡
 if _G.MUMU_CONN then _G.MUMU_CONN:Disconnect() end
 if _G.MUMU_NOCLIP then _G.MUMU_NOCLIP:Disconnect() end
 if _G.MUMU_DRAWINGS then for _, d in pairs(_G.MUMU_DRAWINGS) do pcall(function() d.Box:Remove(); d.HealthBg:Remove(); d.HealthBar:Remove() end) end end
+if _G.MUMU_FOV_CIRCLE then pcall(function() _G.MUMU_FOV_CIRCLE:Remove() end) end
+
 _G.MUMU_DRAWINGS = {}
 _G.CurrentDT = 1/60 
 RunService.RenderStepped:Connect(function(dt) _G.CurrentDT = dt end)
 
+-- 🚀 建立 FOV 視覺化圓圈
+_G.MUMU_FOV_CIRCLE = Drawing.new("Circle")
+_G.MUMU_FOV_CIRCLE.Color = Color3.fromRGB(255, 255, 255)
+_G.MUMU_FOV_CIRCLE.Thickness = 1
+_G.MUMU_FOV_CIRCLE.Filled = false
+_G.MUMU_FOV_CIRCLE.Transparency = 0.5
+_G.MUMU_FOV_CIRCLE.Visible = false
+
 local Whitelisted = {}
 local Settings = {
     ESP = true, TeamESP = true, ConstantBox = true, HealthBar = true,
-    Aimbot = false, WallCheck = true, TriggerBot = false, AimbotSens = 5.0, FOV = 250, StickyAim = true, 
+    Aimbot = false, WallCheck = true, TriggerBot = false, AimbotSens = 5.0, FOV = 250, StickyAim = true, ShowFOV = true, 
     SilentAim = false, RageAutoClick = false, UseDynamicPred = true, BulletSpeed = 3500, RageSnap = false, 
     Fly = false, FlySpeed = 100, Noclip = false, InfJump = false, SpeedHack = false, WalkSpeed = 100,
     PingComp = 0.05, StaticPred = 0.12, MaxDistance = 500
@@ -106,8 +103,7 @@ local function GetPred(tChar)
     local vel = tChar.HumanoidRootPart.Velocity
     local safeVel = v3new(vel.X, vel.Y * 0.3, vel.Z) 
     local mp = Camera.CFrame.Position
-    if Settings.UseDynamicPred then
-        return hp + (safeVel * (((hp - mp).Magnitude / Settings.BulletSpeed) + Settings.PingComp + _G.CurrentDT))
+    if Settings.UseDynamicPred then return hp + (safeVel * (((hp - mp).Magnitude / Settings.BulletSpeed) + Settings.PingComp + _G.CurrentDT))
     else return hp + (safeVel * Settings.StaticPred) end
 end
 
@@ -127,7 +123,7 @@ if SafeGui:FindFirstChild("MUMU_UI") then SafeGui.MUMU_UI:Destroy() end
 
 local SG = Instance.new("ScreenGui", SafeGui); SG.Name = "MUMU_UI"; SG.ResetOnSpawn = false
 local Main = Instance.new("Frame", SG); Main.Size = UDim2.fromOffset(580, 420); Main.Position = UDim2.fromScale(0.5, 0.5); Main.AnchorPoint = v2new(0.5, 0.5); Main.BackgroundColor3 = Color3.fromRGB(17, 18, 20); Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 8); Instance.new("UIStroke", Main).Color = Color3.fromRGB(26, 29, 37); Instance.new("UIStroke", Main).Thickness = 1.5
-local Title = Instance.new("TextLabel", Main); Title.Size = UDim2.new(1, 0, 0, 50); Title.Position = UDim2.new(0, 20, 0, 0); Title.Text = "MUMU PRO (V57)"; Title.TextColor3 = Color3.new(1,1,1); Title.FontFace = Font.new("rbxasset://fonts/families/Nunito.json", Enum.FontWeight.Bold); Title.TextSize = 22; Title.BackgroundTransparency = 1; Title.TextXAlignment = Enum.TextXAlignment.Left
+local Title = Instance.new("TextLabel", Main); Title.Size = UDim2.new(1, 0, 0, 50); Title.Position = UDim2.new(0, 20, 0, 0); Title.Text = "MUMU PRO (V58)"; Title.TextColor3 = Color3.new(1,1,1); Title.FontFace = Font.new("rbxasset://fonts/families/Nunito.json", Enum.FontWeight.Bold); Title.TextSize = 22; Title.BackgroundTransparency = 1; Title.TextXAlignment = Enum.TextXAlignment.Left
 local Sidebar = Instance.new("Frame", Main); Sidebar.Size = UDim2.new(0, 140, 1, -60); Sidebar.Position = UDim2.new(0, 10, 0, 50); Sidebar.BackgroundTransparency = 1; Instance.new("UIListLayout", Sidebar).Padding = UDim.new(0, 6)
 local ContentArea = Instance.new("Frame", Main); ContentArea.Size = UDim2.new(1, -160, 1, -60); ContentArea.Position = UDim2.new(0, 150, 0, 50); ContentArea.BackgroundTransparency = 1
 
@@ -162,8 +158,9 @@ end
 
 local TabLegit = CreateTab("🎯 常規 (Legit)", true)
 CreateToggle(TabLegit, "啟用自瞄 (Enable)", "Aimbot")
+CreateToggle(TabLegit, "顯示 FOV 範圍圈", "ShowFOV") -- 🚀 新增 FOV 視覺化開關
 CreateToggle(TabLegit, "隔牆不瞄 (Wall Check)", "WallCheck")
-CreateSlider(TabLegit, "自瞄平滑度 (越大越平穩)", "AimbotSens", 1.0, 20.0) 
+CreateSlider(TabLegit, "自瞄平滑度", "AimbotSens", 1.0, 20.0) 
 CreateToggle(TabLegit, "啟用黏性瞄準 (Sticky Aim)", "StickyAim")
 CreateSlider(TabLegit, "自瞄範圍 (FOV)", "FOV", 50, 800)
 
@@ -262,6 +259,13 @@ UIS.InputEnded:Connect(function(i) local k=i.KeyCode; if k==Enum.KeyCode.W then 
 
 -- ⚡ [6. 極限防禦渲染引擎] ⚡
 _G.MUMU_CONN = RunService.RenderStepped:Connect(function()
+    -- 🚀 更新 FOV 圓圈狀態與位置
+    if _G.MUMU_FOV_CIRCLE then
+        _G.MUMU_FOV_CIRCLE.Position = Camera.ViewportSize / 2
+        _G.MUMU_FOV_CIRCLE.Radius = Settings.FOV
+        _G.MUMU_FOV_CIRCLE.Visible = Settings.Aimbot and Settings.ShowFOV
+    end
+
     if LocalPlayer.Character then
         if Settings.Fly and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
             local hrp = LocalPlayer.Character.HumanoidRootPart
@@ -328,6 +332,7 @@ _G.MUMU_CONN = RunService.RenderStepped:Connect(function()
 
     _G.SilentTarget = bestSilentTarget
 
+    -- 🚀 終極強化：修復滑鼠函數小數點吃字 BUG
     if Settings.Aimbot then
         if Settings.StickyAim and CurrentStickyTarget then
             local hp, _ = GetHealth(CurrentStickyTarget)
@@ -341,8 +346,18 @@ _G.MUMU_CONN = RunService.RenderStepped:Connect(function()
             if fp then 
                 local sp, os = Camera:WorldToViewportPoint(fp)
                 if os and mousemoverel then 
-                    local deltaX = sp.X - screenCenter.X; local deltaY = sp.Y - screenCenter.Y
-                    if math_abs(deltaX) > 1 or math_abs(deltaY) > 1 then mousemoverel(deltaX / Settings.AimbotSens, deltaY / Settings.AimbotSens) end
+                    local deltaX = sp.X - screenCenter.X
+                    local deltaY = sp.Y - screenCenter.Y
+                    
+                    local stepX = deltaX / Settings.AimbotSens
+                    local stepY = deltaY / Settings.AimbotSens
+                    
+                    -- 解決小數點被捨棄導致的「鎖定停止」問題：確保最小推力為 1 或 -1
+                    if math_abs(stepX) > 0 and math_abs(stepX) < 1 then stepX = stepX > 0 and 1 or -1 end
+                    if math_abs(stepY) > 0 and math_abs(stepY) < 1 then stepY = stepY > 0 and 1 or -1 end
+                    
+                    -- 移除死區，依賴上方最小推力來完美鎖死
+                    mousemoverel(stepX, stepY)
                 end 
             end
         end
