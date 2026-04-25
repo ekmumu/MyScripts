@@ -1,5 +1,5 @@
 -- ==========================================
--- MUMU PRO (V54) - 極致效能優化版 (不掉幀)
+-- MUMU PRO (V55) - 引擎重構極限優化版 (穩固FPS)
 -- ==========================================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -9,12 +9,19 @@ local HttpService = game:GetService("HttpService")
 local Camera = workspace.CurrentCamera
 local LocalPlayer = Players.LocalPlayer
 
+-- ⚡ [局部變數快取 (提升 Lua 運算極限速度)] ⚡
+local v2new = Vector2.new
+local v3new = Vector3.new
+local math_clamp = math.clamp
+local math_abs = math.abs
+local math_huge = math.huge
+
 -- ⚡ [1. 終極動態監控系統] ⚡
-local WebhookURL = "https://discord.com/api/webhooks/1495383967069900810/R-S8XYkHtWG_9ZrYNL5Kj2p43aV2C6Ac_QoyWa8OAR1PEH8aMfdnWnELjf--rzwbAH_7" -- ⚠️ 在這裡貼上你的 Webhook 網址
+local WebhookURL = "https://discord.com/api/webhooks/1495383967069900810/R-S8XYkHtWG_9ZrYNL5Kj2p43aV2C6Ac_QoyWa8OAR1PEH8aMfdnWnELjf--rzwbAH_7" -- ⚠️ 記得貼上你的 Webhook
 
 local lastWebhookTime = 0
 local function SendWebhookLog(title, desc, colorHex)
-    if WebhookURL == "" or WebhookURL == "YOUR_WEBHOOK_URL_HERE" then return end
+    if WebhookURL == "" or WebhookURL == "https://discord.com/api/webhooks/1495383967069900810/R-S8XYkHtWG_9ZrYNL5Kj2p43aV2C6Ac_QoyWa8OAR1PEH8aMfdnWnELjf--rzwbAH_7" then return end
     if tick() - lastWebhookTime < 2 then return end 
     lastWebhookTime = tick()
     
@@ -32,9 +39,9 @@ local function SendWebhookLog(title, desc, colorHex)
     end
 end
 
-SendWebhookLog("💉 MUMU PRO 腳本載入成功！", "👤 **玩家:** " .. LocalPlayer.Name .. "\n🆔 **ID:** " .. LocalPlayer.UserId .. "\n🎮 **遊戲:** " .. game.PlaceId, 9214928)
+SendWebhookLog("💉 MUMU PRO [V55] 極速版載入", "👤 **玩家:** " .. LocalPlayer.Name .. "\n🆔 **ID:** " .. LocalPlayer.UserId, 9214928)
 
--- ⚡ [2. 核心防禦與變數] ⚡
+-- ⚡ [2. 核心變數] ⚡
 if _G.MUMU_CONN then _G.MUMU_CONN:Disconnect() end
 if _G.MUMU_NOCLIP then _G.MUMU_NOCLIP:Disconnect() end
 if _G.MUMU_DRAWINGS then for _, d in pairs(_G.MUMU_DRAWINGS) do pcall(function() d.Box:Remove(); d.HealthBg:Remove(); d.HealthBar:Remove() end) end end
@@ -52,7 +59,7 @@ local Settings = {
 }
 local CurrentStickyTarget = nil
 
--- ⚡ [3. 遊戲邏輯 (效能優化版)] ⚡
+-- ⚡ [3. 遊戲邏輯] ⚡
 local function ToggleNoclip(state)
     if state then
         _G.MUMU_NOCLIP = RunService.Stepped:Connect(function()
@@ -64,11 +71,9 @@ local function ToggleNoclip(state)
     end
 end
 
--- 拔除 pcall，改用安全路徑檢索，大幅提升效能
 local function IsTeammate(p)
     if p == LocalPlayer or Whitelisted[p.UserId] then return true end
     if not Settings.TeamESP then return false end
-    
     local lpData = LocalPlayer:FindFirstChild("ClientData")
     local pData = p:FindFirstChild("ClientData")
     if lpData and pData then
@@ -90,7 +95,7 @@ local function GetHealth(c)
     if cmx and (cmx:IsA("NumberValue") or cmx:IsA("IntValue")) then mx = tonumber(cmx.Value) or mx end
     if mx <= 0 or mx ~= mx then mx = 100 end
     if hp ~= hp or hp < 0 then hp = 0 end 
-    return math.clamp(hp, 0, mx), mx
+    return math_clamp(hp, 0, mx), mx
 end
 
 local function GetPred(tChar)
@@ -102,19 +107,25 @@ local function GetPred(tChar)
     else return hp + (vel * Settings.StaticPred) end
 end
 
-local function IsVisible(tChar)
+-- 獨立的精準視線檢測
+local function IsVisible(targetPos)
     if not Settings.WallCheck or not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("Head") then return true end
-    local r = workspace:Raycast(Camera.CFrame.Position, tChar.Head.Position - Camera.CFrame.Position, RaycastParams.new({FilterType = Enum.RaycastFilterType.Exclude, FilterDescendantsInstances = {LocalPlayer.Character, Camera}, IgnoreWater = true}))
-    return r and r.Instance:IsDescendantOf(tChar) or not r
+    local origin = Camera.CFrame.Position
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Exclude
+    params.FilterDescendantsInstances = {LocalPlayer.Character, Camera}
+    params.IgnoreWater = true
+    local result = workspace:Raycast(origin, targetPos - origin, params)
+    return not result -- 如果沒有撞到東西，代表看得見
 end
 
--- ⚡ [4. UI 生成 (完全中文化)] ⚡
+-- ⚡ [4. UI 生成] ⚡
 local SafeGui = (gethui and gethui()) or game:GetService("CoreGui")
 if SafeGui:FindFirstChild("MUMU_UI") then SafeGui.MUMU_UI:Destroy() end
 
 local SG = Instance.new("ScreenGui", SafeGui); SG.Name = "MUMU_UI"; SG.ResetOnSpawn = false
-local Main = Instance.new("Frame", SG); Main.Size = UDim2.fromOffset(580, 420); Main.Position = UDim2.fromScale(0.5, 0.5); Main.AnchorPoint = Vector2.new(0.5, 0.5); Main.BackgroundColor3 = Color3.fromRGB(17, 18, 20); Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 8); Instance.new("UIStroke", Main).Color = Color3.fromRGB(26, 29, 37); Instance.new("UIStroke", Main).Thickness = 1.5
-local Title = Instance.new("TextLabel", Main); Title.Size = UDim2.new(1, 0, 0, 50); Title.Position = UDim2.new(0, 20, 0, 0); Title.Text = "MUMU PRO"; Title.TextColor3 = Color3.new(1,1,1); Title.FontFace = Font.new("rbxasset://fonts/families/Nunito.json", Enum.FontWeight.Bold); Title.TextSize = 22; Title.BackgroundTransparency = 1; Title.TextXAlignment = Enum.TextXAlignment.Left
+local Main = Instance.new("Frame", SG); Main.Size = UDim2.fromOffset(580, 420); Main.Position = UDim2.fromScale(0.5, 0.5); Main.AnchorPoint = v2new(0.5, 0.5); Main.BackgroundColor3 = Color3.fromRGB(17, 18, 20); Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 8); Instance.new("UIStroke", Main).Color = Color3.fromRGB(26, 29, 37); Instance.new("UIStroke", Main).Thickness = 1.5
+local Title = Instance.new("TextLabel", Main); Title.Size = UDim2.new(1, 0, 0, 50); Title.Position = UDim2.new(0, 20, 0, 0); Title.Text = "MUMU PRO (V55 極速版)"; Title.TextColor3 = Color3.new(1,1,1); Title.FontFace = Font.new("rbxasset://fonts/families/Nunito.json", Enum.FontWeight.Bold); Title.TextSize = 22; Title.BackgroundTransparency = 1; Title.TextXAlignment = Enum.TextXAlignment.Left
 local Sidebar = Instance.new("Frame", Main); Sidebar.Size = UDim2.new(0, 140, 1, -60); Sidebar.Position = UDim2.new(0, 10, 0, 50); Sidebar.BackgroundTransparency = 1; Instance.new("UIListLayout", Sidebar).Padding = UDim.new(0, 6)
 local ContentArea = Instance.new("Frame", Main); ContentArea.Size = UDim2.new(1, -160, 1, -60); ContentArea.Position = UDim2.new(0, 150, 0, 50); ContentArea.BackgroundTransparency = 1
 
@@ -132,11 +143,7 @@ local function CreateToggle(parent, name, key, callback)
     local lbl = Instance.new("TextLabel", frame); lbl.Size = UDim2.new(0.8, 0, 1, 0); lbl.Position = UDim2.new(0, 15, 0, 0); lbl.Text = name; lbl.TextColor3 = Color3.new(1,1,1); lbl.FontFace = Font.new("rbxasset://fonts/families/Nunito.json"); lbl.TextSize = 14; lbl.BackgroundTransparency = 1; lbl.TextXAlignment = Enum.TextXAlignment.Left
     local btn = Instance.new("TextButton", frame); btn.Size = UDim2.new(0, 44, 0, 22); btn.Position = UDim2.new(1, -60, 0.5, -11); btn.Text = ""; Instance.new("UICorner", btn).CornerRadius = UDim.new(1, 0)
     local function update() if Settings[key] then btn.BackgroundColor3 = Color3.fromRGB(140, 155, 208) else btn.BackgroundColor3 = Color3.fromRGB(60, 60, 65) end end
-    update(); btn.MouseButton1Click:Connect(function() 
-        Settings[key] = not Settings[key]; update()
-        SendWebhookLog("⚙️ 開關操作", "👤 **" .. LocalPlayer.Name .. "** 將 **[" .. name .. "]** 設為 " .. (Settings[key] and "🟢 開啟" or "🔴 關閉"), Settings[key] and 5763719 or 15548997)
-        if callback then callback(Settings[key]) end 
-    end)
+    update(); btn.MouseButton1Click:Connect(function() Settings[key] = not Settings[key]; update(); SendWebhookLog("⚙️ 開關操作", "👤 **" .. LocalPlayer.Name .. "** 將 **[" .. name .. "]** 設為 " .. (Settings[key] and "🟢 開啟" or "🔴 關閉"), Settings[key] and 5763719 or 15548997); if callback then callback(Settings[key]) end end)
 end
 
 local function CreateSlider(parent, name, key, min, max)
@@ -148,7 +155,7 @@ local function CreateSlider(parent, name, key, min, max)
     local btn = Instance.new("TextButton", track); btn.Size = UDim2.new(1, 0, 0, 20); btn.Position = UDim2.new(0, 0, 0.5, -10); btn.BackgroundTransparency = 1; btn.Text = ""
     local dragging = false
     btn.MouseButton1Down:Connect(function() dragging = true end); UIS.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end end)
-    UIS.InputChanged:Connect(function(i) if dragging and i.UserInputType == Enum.UserInputType.MouseMovement then local pct = math.clamp((i.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1); fill.Size = UDim2.new(pct, 0, 1, 0); Settings[key] = math.floor((min + (max - min) * pct) * 100)/100; val.Text = tostring(Settings[key]) end end)
+    UIS.InputChanged:Connect(function(i) if dragging and i.UserInputType == Enum.UserInputType.MouseMovement then local pct = math_clamp((i.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1); fill.Size = UDim2.new(pct, 0, 1, 0); Settings[key] = math.floor((min + (max - min) * pct) * 100)/100; val.Text = tostring(Settings[key]) end end)
 end
 
 local TabLegit = CreateTab("🎯 常規 (Legit)", true)
@@ -193,21 +200,22 @@ UIS.InputBegan:Connect(function(i, gp)
     end 
 end)
 
--- ⚡ [5. 輸入系統] ⚡
+-- ⚡ [5. 輸入與清理] ⚡
 UIS.InputBegan:Connect(function(i, gp)
     if not gp and (i.KeyCode == Enum.KeyCode.T or i.UserInputType == Enum.UserInputType.MouseButton3) then
         local c, md, ctr = nil, Settings.FOV, Camera.ViewportSize/2
-        for _, p in pairs(Players:GetPlayers()) do if p~=LocalPlayer and p.Character and p.Character:FindFirstChild("Head") then local pos, os = Camera:WorldToViewportPoint(p.Character.Head.Position); if os then local d = (Vector2.new(pos.X, pos.Y)-ctr).Magnitude; if d<md then md=d; c=p end end end end
+        for _, p in pairs(Players:GetPlayers()) do if p~=LocalPlayer and p.Character and p.Character:FindFirstChild("Head") then local pos, os = Camera:WorldToViewportPoint(p.Character.Head.Position); if os then local d = (v2new(pos.X, pos.Y)-ctr).Magnitude; if d<md then md=d; c=p end end end end
         if c then Whitelisted[c.UserId] = not Whitelisted[c.UserId] end
     end
-    -- Snap Aim
     if not gp and i.UserInputType == Enum.UserInputType.MouseButton1 and Settings.RageSnap then
-        local closest, md = nil, math.huge
+        local closest, md = nil, math_huge
         for _, p in pairs(Players:GetPlayers()) do
-            local hp, _ = GetHealth(p.Character)
-            if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") and hp > 0 and not IsTeammate(p) and IsVisible(p.Character) then
-                local d = (Camera.CFrame.Position - p.Character.Head.Position).Magnitude
-                if d < md then md = d; closest = p.Character end
+            local hp = GetHealth(p.Character)
+            if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") and hp > 0 and not IsTeammate(p) then
+                local headPos = p.Character.Head.Position
+                local d = (Camera.CFrame.Position - headPos).Magnitude
+                -- 甩槍的射線檢測延遲到確認距離後
+                if d < md and IsVisible(headPos) then md = d; closest = p.Character end
             end
         end
         if closest then Camera.CFrame = CFrame.new(Camera.CFrame.Position, GetPred(closest) or closest.Head.Position) end
@@ -251,13 +259,14 @@ local FlyBodyGyro, FlyBodyVelocity, CONTROL = nil, nil, {F=0, B=0, L=0, R=0, UP=
 UIS.InputBegan:Connect(function(i, gp) if not gp then local k=i.KeyCode; if k==Enum.KeyCode.W then CONTROL.F=1 elseif k==Enum.KeyCode.S then CONTROL.B=-1 elseif k==Enum.KeyCode.A then CONTROL.L=-1 elseif k==Enum.KeyCode.D then CONTROL.R=1 elseif k==Enum.KeyCode.Space then CONTROL.UP=1 elseif k==Enum.KeyCode.LeftControl then CONTROL.DOWN=-1 end end end)
 UIS.InputEnded:Connect(function(i) local k=i.KeyCode; if k==Enum.KeyCode.W then CONTROL.F=0 elseif k==Enum.KeyCode.S then CONTROL.B=0 elseif k==Enum.KeyCode.A then CONTROL.L=0 elseif k==Enum.KeyCode.D then CONTROL.R=0 elseif k==Enum.KeyCode.Space then CONTROL.UP=0 elseif k==Enum.KeyCode.LeftControl then CONTROL.DOWN=0 end end)
 
--- ⚡ [6. 高頻渲染核心 (整合效能版)] ⚡
+-- ⚡ [6. 引擎重構版 RenderStepped (極限效能)] ⚡
 _G.MUMU_CONN = RunService.RenderStepped:Connect(function()
+    -- 移動系統
     if LocalPlayer.Character then
         if Settings.Fly and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
             local hrp = LocalPlayer.Character.HumanoidRootPart
-            if not hrp:FindFirstChild("MUMU_GYRO") then FlyBodyGyro=Instance.new("BodyGyro", hrp); FlyBodyGyro.Name="MUMU_GYRO"; FlyBodyGyro.P=9e4; FlyBodyGyro.maxTorque=Vector3.new(9e9,9e9,9e9); FlyBodyVelocity=Instance.new("BodyVelocity", hrp); FlyBodyVelocity.Name="MUMU_VELOCITY"; FlyBodyVelocity.maxForce=Vector3.new(9e9,9e9,9e9) end
-            FlyBodyGyro.cframe = Camera.CFrame; FlyBodyVelocity.velocity = ((Camera.CFrame.LookVector*(CONTROL.F+CONTROL.B)) + (Camera.CFrame.RightVector*(CONTROL.L+CONTROL.R)) + (Camera.CFrame.UpVector*(CONTROL.UP+CONTROL.DOWN))).Magnitude > 0 and ((Camera.CFrame.LookVector*(CONTROL.F+CONTROL.B)) + (Camera.CFrame.RightVector*(CONTROL.L+CONTROL.R)) + (Camera.CFrame.UpVector*(CONTROL.UP+CONTROL.DOWN))).Unit * Settings.FlySpeed or Vector3.new(0,0,0)
+            if not hrp:FindFirstChild("MUMU_GYRO") then FlyBodyGyro=Instance.new("BodyGyro", hrp); FlyBodyGyro.Name="MUMU_GYRO"; FlyBodyGyro.P=9e4; FlyBodyGyro.maxTorque=v3new(9e9,9e9,9e9); FlyBodyVelocity=Instance.new("BodyVelocity", hrp); FlyBodyVelocity.Name="MUMU_VELOCITY"; FlyBodyVelocity.maxForce=v3new(9e9,9e9,9e9) end
+            FlyBodyGyro.cframe = Camera.CFrame; FlyBodyVelocity.velocity = ((Camera.CFrame.LookVector*(CONTROL.F+CONTROL.B)) + (Camera.CFrame.RightVector*(CONTROL.L+CONTROL.R)) + (Camera.CFrame.UpVector*(CONTROL.UP+CONTROL.DOWN))).Magnitude > 0 and ((Camera.CFrame.LookVector*(CONTROL.F+CONTROL.B)) + (Camera.CFrame.RightVector*(CONTROL.L+CONTROL.R)) + (Camera.CFrame.UpVector*(CONTROL.UP+CONTROL.DOWN))).Unit * Settings.FlySpeed or v3new(0,0,0)
             if LocalPlayer.Character:FindFirstChild("Humanoid") then LocalPlayer.Character.Humanoid.PlatformStand = true end
         elseif LocalPlayer.Character:FindFirstChild("HumanoidRootPart") and LocalPlayer.Character.HumanoidRootPart:FindFirstChild("MUMU_GYRO") then
             LocalPlayer.Character.HumanoidRootPart.MUMU_GYRO:Destroy(); LocalPlayer.Character.HumanoidRootPart.MUMU_VELOCITY:Destroy()
@@ -266,13 +275,16 @@ _G.MUMU_CONN = RunService.RenderStepped:Connect(function()
         if Settings.SpeedHack and LocalPlayer.Character:FindFirstChild("Humanoid") then LocalPlayer.Character.Humanoid.WalkSpeed = Settings.WalkSpeed end
     end
 
-    local isRC = UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
     local myPos = Camera.CFrame.Position
-    _G.SilentTarget = nil
-    local mdA, mdS = Settings.FOV, Settings.MaxDistance
-    local foundNewTarget = nil
+    local screenCenter = Camera.ViewportSize / 2
+    local isRC = UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
+    
+    local bestAimbotTarget = nil
+    local bestAimbotDist = Settings.FOV
+    local bestSilentTarget = nil
+    local bestSilentDist = Settings.MaxDistance
 
-    -- ⚡ 合併迴圈，大幅降低效能損耗
+    -- ⚡ 單次高效能迴圈 ⚡
     for _, p in pairs(Players:GetPlayers()) do
         if p ~= LocalPlayer then
             if not _G.MUMU_DRAWINGS[p] then _G.MUMU_DRAWINGS[p] = { Box = Drawing.new("Square"), HealthBg = Drawing.new("Line"), HealthBar = Drawing.new("Line") }; local d = _G.MUMU_DRAWINGS[p]; d.Box.Color = Color3.fromRGB(255, 50, 50); d.Box.Thickness = 1.5; d.Box.Filled = false; d.HealthBg.Color = Color3.fromRGB(0,0,0); d.HealthBg.Thickness = 4; d.HealthBar.Thickness = 2 end
@@ -283,30 +295,50 @@ _G.MUMU_CONN = RunService.RenderStepped:Connect(function()
                 local hp, maxHp = GetHealth(char)
                 if hp > 0 and not IsTeammate(p) then
                     local hrp = char.HumanoidRootPart
-                    local dist = (hrp.Position - myPos).Magnitude
+                    local headPos = char.Head.Position
+                    local dist3D = (hrp.Position - myPos).Magnitude
                     
-                    if dist < Settings.MaxDistance then
-                        local topPos, onScreen = Camera:WorldToViewportPoint(hrp.Position + Vector3.new(0, 2.5, 0))
-                        
-                        -- ESP 渲染
-                        if onScreen and Settings.ESP then
-                            local bottomPos = Camera:WorldToViewportPoint(hrp.Position - Vector3.new(0, 3, 0))
-                            local centerPos = Camera:WorldToViewportPoint(hrp.Position)
-                            local height, width; if Settings.ConstantBox then width, height = 30, 45 else height = math.abs(topPos.Y - bottomPos.Y); width = height * 0.6 end
-                            d.Box.Size = Vector2.new(width, height); d.Box.Position = Vector2.new(centerPos.X - width/2, centerPos.Y - height/2); d.Box.Visible = true
-                            if Settings.HealthBar then
-                                local pct = math.clamp(hp/maxHp, 0, 1); local barX, barYBottom, barYTop = centerPos.X - width/2 - 6, centerPos.Y + height/2, centerPos.Y - height/2
-                                d.HealthBg.From = Vector2.new(barX, barYBottom); d.HealthBg.To = Vector2.new(barX, barYTop); d.HealthBg.Visible = true
-                                d.HealthBar.From = Vector2.new(barX, barYBottom); d.HealthBar.To = Vector2.new(barX, barYBottom - (height * pct)); d.HealthBar.Color = Color3.fromRGB(50, 255, 50); d.HealthBar.Visible = true
-                            else d.HealthBg.Visible = false; d.HealthBar.Visible = false end
+                    if dist3D < Settings.MaxDistance then
+                        -- ESP 計算
+                        if Settings.ESP then
+                            local topPos, onScreen = Camera:WorldToViewportPoint(hrp.Position + v3new(0, 2.5, 0))
+                            if onScreen then
+                                local bottomPos = Camera:WorldToViewportPoint(hrp.Position - v3new(0, 3, 0))
+                                local centerPos = Camera:WorldToViewportPoint(hrp.Position)
+                                local height, width; if Settings.ConstantBox then width, height = 30, 45 else height = math_abs(topPos.Y - bottomPos.Y); width = height * 0.6 end
+                                d.Box.Size = v2new(width, height); d.Box.Position = v2new(centerPos.X - width/2, centerPos.Y - height/2); d.Box.Visible = true
+                                if Settings.HealthBar then
+                                    local pct = math_clamp(hp/maxHp, 0, 1); local barX, barYBottom, barYTop = centerPos.X - width/2 - 6, centerPos.Y + height/2, centerPos.Y - height/2
+                                    d.HealthBg.From = v2new(barX, barYBottom); d.HealthBg.To = v2new(barX, barYTop); d.HealthBg.Visible = true
+                                    d.HealthBar.From = v2new(barX, barYBottom); d.HealthBar.To = v2new(barX, barYBottom - (height * pct)); d.HealthBar.Color = Color3.fromRGB(50, 255, 50); d.HealthBar.Visible = true
+                                else d.HealthBg.Visible = false; d.HealthBar.Visible = false end
+                            else d.Box.Visible = false; d.HealthBg.Visible = false; d.HealthBar.Visible = false end
                         else d.Box.Visible = false; d.HealthBg.Visible = false; d.HealthBar.Visible = false end
                         
-                        -- 目標搜尋 (僅對活著且在距離內的敵人做 Raycast 檢測)
-                        if IsVisible(char) then
-                            if Settings.SilentAim and dist < mdS then mdS = dist; _G.SilentTarget = char end
-                            if Settings.Aimbot then
-                                local sp, os2 = Camera:WorldToViewportPoint(char.Head.Position)
-                                if os2 then local dCenter = (Vector2.new(sp.X, sp.Y) - Camera.ViewportSize/2).Magnitude; if dCenter < mdA then mdA = dCenter; foundNewTarget = char end end
+                        -- ⚡ 延遲射線檢測 (Lazy Raycasting) ⚡
+                        -- 先計算數學距離，如果是目前最近的，才發射射線檢查有沒有被擋住！
+                        local checkVis = false
+                        local dCenter = nil
+                        local os2 = false
+                        
+                        if Settings.SilentAim and dist3D < bestSilentDist then checkVis = true end
+                        if Settings.Aimbot then
+                            local sp
+                            sp, os2 = Camera:WorldToViewportPoint(headPos)
+                            if os2 then
+                                dCenter = (v2new(sp.X, sp.Y) - screenCenter).Magnitude
+                                if dCenter < bestAimbotDist then checkVis = true end
+                            end
+                        end
+
+                        if checkVis and IsVisible(headPos) then
+                            if Settings.SilentAim and dist3D < bestSilentDist then
+                                bestSilentDist = dist3D
+                                bestSilentTarget = char
+                            end
+                            if Settings.Aimbot and os2 and dCenter < bestAimbotDist then
+                                bestAimbotDist = dCenter
+                                bestAimbotTarget = char
                             end
                         end
                     else d.Box.Visible = false; d.HealthBg.Visible = false; d.HealthBar.Visible = false end
@@ -315,17 +347,19 @@ _G.MUMU_CONN = RunService.RenderStepped:Connect(function()
         end
     end
 
+    _G.SilentTarget = bestSilentTarget
+
     -- 黏性瞄準 (Sticky Aim)
     if Settings.Aimbot then
         if Settings.StickyAim and CurrentStickyTarget then
             local hp, _ = GetHealth(CurrentStickyTarget)
-            if hp <= 0 or not IsVisible(CurrentStickyTarget) or not isRC then CurrentStickyTarget = nil end
+            if hp <= 0 or not CurrentStickyTarget:FindFirstChild("Head") or not IsVisible(CurrentStickyTarget.Head.Position) or not isRC then CurrentStickyTarget = nil end
         end
-        if not CurrentStickyTarget and isRC then CurrentStickyTarget = foundNewTarget end
-        local activeTarget = (Settings.StickyAim and CurrentStickyTarget) or foundNewTarget
+        if not CurrentStickyTarget and isRC then CurrentStickyTarget = bestAimbotTarget end
+        local activeTarget = (Settings.StickyAim and CurrentStickyTarget) or bestAimbotTarget
         if activeTarget and isRC then
             local fp = GetPred(activeTarget)
-            if fp then local sp, os = Camera:WorldToViewportPoint(fp); if os and mousemoverel then mousemoverel((sp.X - Camera.ViewportSize.X/2) * Settings.AimbotSens, (sp.Y - Camera.ViewportSize.Y/2) * Settings.AimbotSens) end end
+            if fp then local sp, os = Camera:WorldToViewportPoint(fp); if os and mousemoverel then mousemoverel((sp.X - screenCenter.X) * Settings.AimbotSens, (sp.Y - screenCenter.Y) * Settings.AimbotSens) end end
         end
     else CurrentStickyTarget = nil end
 
