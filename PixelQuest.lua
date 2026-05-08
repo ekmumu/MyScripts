@@ -1,4 +1,4 @@
--- [[ 純淨本地版 攻速修改器 (保證不報錯) ]] --
+-- [[ 純淨本地版 攻速修改器 (已修正打字錯誤) ]] --
 
 local CoreGui = game:GetService("CoreGui")
 local Players = game:GetService("Players")
@@ -38,7 +38,8 @@ TextBox.Position = UDim2.new(0.1, 0, 0.35, 0)
 TextBox.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
 TextBox.TextColor3 = Color3.fromRGB(255, 255, 255)
 TextBox.Text = "輸入攻速倍率 (例: 5)"
-TextBox.TextClearOnFocus = true
+-- ⚠️ 就是這裡！已經修正為正確的 ClearTextOnFocus
+TextBox.ClearTextOnFocus = true 
 TextBox.Parent = Frame
 
 local Button = Instance.new("TextButton")
