@@ -1,6 +1,5 @@
 -- ==========================================
--- MUMU PRO V62 - RIVALS 專用 極致優化版
--- 自瞄只在開鏡時生效
+-- MUMU PRO V63 - RIVALS 最完整極致版
 -- ==========================================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -12,19 +11,20 @@ local v2new = Vector2.new
 
 local MUMU = {
     Settings = {
-        ESP = true, TeamESP = false, ConstantBox = true, HealthBar = true,
+        ESP = true, TeamESP = false, ConstantBox = true, HealthBar = true, NameESP = true,
         Aimbot = false, WallCheck = true, AimbotSens = 1.8, FOV = 300, StickyAim = true,
         SilentAim = true, RageSnap = false, AutoFire = false,
-        Fly = false, FlySpeed = 130, Noclip = false, SpeedHack = false, WalkSpeed = 110,
+        Fly = false, FlySpeed = 130, Noclip = false, InfJump = false, SpeedHack = false, WalkSpeed = 110,
         MaxDistance = 700
     },
     Drawings = {},
     Connections = {},
     CurrentTarget = nil,
-    LastTargetUpdate = 0
+    LastTargetUpdate = 0,
+    MenuVisible = true
 }
 
--- 清理舊實例
+-- 清理舊腳本
 local function DestroyOld()
     for _, conn in pairs(MUMU.Connections) do pcall(function() conn:Disconnect() end) end
     for _, d in pairs(MUMU.Drawings) do for _, obj in pairs(d) do pcall(function() obj:Remove() end) end end
@@ -47,36 +47,36 @@ SG.Name = "MUMU_RIVALS"
 SG.ResetOnSpawn = false
 
 local Main = Instance.new("Frame", SG)
-Main.Size = UDim2.fromOffset(660, 500)
+Main.Size = UDim2.fromOffset(680, 520)
 Main.Position = UDim2.fromScale(0.5, 0.5)
 Main.AnchorPoint = v2new(0.5, 0.5)
-Main.BackgroundColor3 = Color3.fromRGB(14, 15, 18)
+Main.BackgroundColor3 = Color3.fromRGB(13, 14, 17)
 Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 16)
 Instance.new("UIStroke", Main).Color = Color3.fromRGB(100, 150, 255)
 
 local Title = Instance.new("TextLabel", Main)
 Title.Size = UDim2.new(1,0,0,70)
 Title.BackgroundTransparency = 1
-Title.Text = "MUMU PRO V62 - RIVALS"
+Title.Text = "MUMU PRO V63 - RIVALS 完整版"
 Title.TextColor3 = Color3.new(1,1,1)
 Title.FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json", Enum.FontWeight.Bold)
-Title.TextSize = 29
+Title.TextSize = 28
 
 local Sidebar = Instance.new("Frame", Main)
-Sidebar.Size = UDim2.new(0, 180, 1, -90)
+Sidebar.Size = UDim2.new(0, 190, 1, -90)
 Sidebar.Position = UDim2.new(0, 15, 0, 80)
 Sidebar.BackgroundTransparency = 1
 
 local Content = Instance.new("Frame", Main)
-Content.Size = UDim2.new(1, -210, 1, -90)
-Content.Position = UDim2.new(0, 205, 0, 80)
+Content.Size = UDim2.new(1, -220, 1, -90)
+Content.Position = UDim2.new(0, 215, 0, 80)
 Content.BackgroundTransparency = 1
 
 local Tabs = {}
 local function CreateTab(name, isFirst)
     local btn = Instance.new("TextButton", Sidebar)
-    btn.Size = UDim2.new(1, -10, 0, 48)
-    btn.BackgroundColor3 = isFirst and Color3.fromRGB(35, 50, 90) or Color3.fromRGB(22, 24, 30)
+    btn.Size = UDim2.new(1, -10, 0, 50)
+    btn.BackgroundColor3 = isFirst and Color3.fromRGB(35, 55, 100) or Color3.fromRGB(22, 24, 30)
     btn.Text = "  " .. name
     btn.TextColor3 = Color3.new(1,1,1)
     btn.FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json", Enum.FontWeight.Medium)
@@ -96,7 +96,7 @@ local function CreateTab(name, isFirst)
             t.Btn.BackgroundColor3 = Color3.fromRGB(22, 24, 30)
             t.Page.Visible = false
         end
-        btn.BackgroundColor3 = Color3.fromRGB(45, 65, 120)
+        btn.BackgroundColor3 = Color3.fromRGB(45, 70, 130)
         page.Visible = true
     end)
     table.insert(Tabs, {Btn = btn, Page = page})
@@ -105,13 +105,13 @@ end
 
 local function CreateToggle(parent, text, key)
     local frame = Instance.new("Frame", parent)
-    frame.Size = UDim2.new(1, -20, 0, 55)
+    frame.Size = UDim2.new(1, -25, 0, 58)
     frame.BackgroundColor3 = Color3.fromRGB(22, 24, 30)
     Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 10)
 
     local lbl = Instance.new("TextLabel", frame)
-    lbl.Size = UDim2.new(0.65, 0, 1, 0)
-    lbl.Position = UDim2.new(0, 25, 0, 0)
+    lbl.Size = UDim2.new(0.65,0,1,0)
+    lbl.Position = UDim2.new(0,25,0,0)
     lbl.BackgroundTransparency = 1
     lbl.Text = text
     lbl.TextColor3 = Color3.new(1,1,1)
@@ -119,19 +119,19 @@ local function CreateToggle(parent, text, key)
     lbl.TextXAlignment = Enum.TextXAlignment.Left
 
     local toggle = Instance.new("TextButton", frame)
-    toggle.Size = UDim2.new(0, 62, 0, 34)
-    toggle.Position = UDim2.new(1, -80, 0.5, -17)
-    toggle.BackgroundColor3 = MUMU.Settings[key] and Color3.fromRGB(80, 210, 130) or Color3.fromRGB(50, 50, 55)
+    toggle.Size = UDim2.new(0,65,0,36)
+    toggle.Position = UDim2.new(1,-85,0.5,-18)
+    toggle.BackgroundColor3 = MUMU.Settings[key] and Color3.fromRGB(80,210,130) or Color3.fromRGB(50,50,55)
     toggle.Text = ""
-    Instance.new("UICorner", toggle).CornerRadius = UDim.new(1, 0)
+    Instance.new("UICorner", toggle).CornerRadius = UDim.new(1,0)
 
     toggle.MouseButton1Click:Connect(function()
         MUMU.Settings[key] = not MUMU.Settings[key]
-        toggle.BackgroundColor3 = MUMU.Settings[key] and Color3.fromRGB(80, 210, 130) or Color3.fromRGB(50, 50, 55)
+        toggle.BackgroundColor3 = MUMU.Settings[key] and Color3.fromRGB(80,210,130) or Color3.fromRGB(50,50,55)
     end)
 end
 
--- 建立分頁
+-- 分頁
 local TabLegit = CreateTab("🎯 Legit", true)
 CreateToggle(TabLegit, "自瞄 (開鏡鎖定)", "Aimbot")
 CreateToggle(TabLegit, "顯示 FOV", "FOV")
@@ -150,9 +150,18 @@ CreateToggle(TabVisual, "恆定方框", "ConstantBox")
 CreateToggle(TabVisual, "血條", "HealthBar")
 
 local TabMisc = CreateTab("🏃 Misc", false)
-CreateToggle(TabMisc, "飛行模式", "Fly")
-CreateToggle(TabMisc, "穿牆模式", "Noclip")
-CreateToggle(TabMisc, "速度加速", "SpeedHack")
+CreateToggle(TabMisc, "飛行", "Fly")
+CreateToggle(TabMisc, "穿牆", "Noclip")
+CreateToggle(TabMisc, "無限跳", "InfJump")
+CreateToggle(TabMisc, "速度", "SpeedHack")
+
+-- J 鍵 開關菜單
+UIS.InputBegan:Connect(function(input, gp)
+    if not gp and input.KeyCode == Enum.KeyCode.J then
+        MUMU.MenuVisible = not MUMU.MenuVisible
+        Main.Visible = MUMU.MenuVisible
+    end
+end)
 
 -- ==================== Silent Aim ====================
 local OldRaycast
@@ -172,22 +181,23 @@ MUMU.Connections.Render = RunService.RenderStepped:Connect(function()
     FOVCircle.Radius = MUMU.Settings.FOV
     FOVCircle.Visible = MUMU.Settings.Aimbot
 
-    local isAiming = UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)  -- 開鏡判定
+    local isAiming = UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
 
-    -- 只在開鏡時執行 Aimbot
     if MUMU.Settings.Aimbot and isAiming and MUMU.CurrentTarget then
         local predPos = MUMU.CurrentTarget.Head.Position
         local screenPos = Camera:WorldToViewportPoint(predPos)
         local center = Camera.ViewportSize / 2
         local delta = (v2new(screenPos.X, screenPos.Y) - center) / MUMU.Settings.AimbotSens
-        
-        if mousemoverel then
-            mousemoverel(delta.X, delta.Y)
-        end
+        if mousemoverel then mousemoverel(delta.X, delta.Y) end
+    end
+
+    -- Speed Hack
+    if MUMU.Settings.SpeedHack and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+        LocalPlayer.Character.Humanoid.WalkSpeed = MUMU.Settings.WalkSpeed
     end
 end)
 
--- 目標搜尋 (獨立執行，效能更好)
+-- 目標搜尋
 MUMU.Connections.Target = RunService.Heartbeat:Connect(function()
     if tick() - MUMU.LastTargetUpdate < 0.08 then return end
     MUMU.LastTargetUpdate = tick()
@@ -205,4 +215,13 @@ MUMU.Connections.Target = RunService.Heartbeat:Connect(function()
     MUMU.CurrentTarget = best
 end)
 
-print("✅ MUMU PRO V62 - RIVALS 載入成功！自瞄已設定為開鏡鎖定")
+-- Fly & Noclip & InfJump 簡易版（可再擴充）
+MUMU.Connections.Misc = RunService.Stepped:Connect(function()
+    if MUMU.Settings.Noclip and LocalPlayer.Character then
+        for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
+            if part:IsA("BasePart") then part.CanCollide = false end
+        end
+    end
+end)
+
+print("✅ MUMU PRO V63 完整版載入成功！按 J 鍵隱藏/顯示菜單")
