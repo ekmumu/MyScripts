@@ -29,7 +29,7 @@ local function SendWebhookLog(title, desc, colorHex)
         task.spawn(function() pcall(function() req({Url = safeURL, Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = HttpService:JSONEncode(data)}) end) end)
     end
 end
-SendWebhookLog("💉 MUMU PRO [V60] 極速版載入", "👤 **玩家:** " .. LocalPlayer.Name .. "\n🆔 **ID:** " .. LocalPlayer.UserId, 9214928)
+SendWebhookLog(" MUMU PRO [V60] 極速版載入", " **玩家:** " .. LocalPlayer.Name .. "\n🆔 **ID:** " .. LocalPlayer.UserId, 9214928)
 
 --  [核心清理與變數] 
 if _G.MUMU_CONN then _G.MUMU_CONN:Disconnect() end
