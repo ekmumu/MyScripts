@@ -1,6 +1,5 @@
--- ==========================================
--- MUMU PRO (V60) - 零垃圾回收極速版 (徹底解決卡頓)
--- ==========================================
+
+-- MUMU PRO (V60) 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UIS = game:GetService("UserInputService")
