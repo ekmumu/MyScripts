@@ -8,13 +8,13 @@ local HttpService = game:GetService("HttpService")
 local Camera = workspace.CurrentCamera
 local LocalPlayer = Players.LocalPlayer
 
--- ⚡ [局部變數快取 (極限壓榨效能)] ⚡
+--  [局部變數快取 ] 
 local v2new, v3new = Vector2.new, Vector3.new
 local math_clamp, math_abs, math_huge = math.clamp, math.abs, math.huge
 local CFrame_new = CFrame.new
 local Ray_new = Ray.new
 
--- ⚡ [1. 智能動態監控系統] ⚡
+--  [ 智能動態監控系統] 
 local WebhookURL = "https://discord.com/api/webhooks/1495383967069900810/R-S8XYkHtWG_9ZrYNL5Kj2p43aV2C6Ac_QoyWa8OAR1PEH8aMfdnWnELjf--rzwbAH_7" -- ⚠️ 你的 Discord Webhook 網址
 
 local lastWebhookTime = 0
@@ -31,7 +31,7 @@ local function SendWebhookLog(title, desc, colorHex)
 end
 SendWebhookLog("💉 MUMU PRO [V60] 極速版載入", "👤 **玩家:** " .. LocalPlayer.Name .. "\n🆔 **ID:** " .. LocalPlayer.UserId, 9214928)
 
--- ⚡ [2. 核心清理與變數] ⚡
+--  [核心清理與變數] 
 if _G.MUMU_CONN then _G.MUMU_CONN:Disconnect() end
 if _G.MUMU_NOCLIP then _G.MUMU_NOCLIP:Disconnect() end
 if _G.MUMU_DRAWINGS then for _, d in pairs(_G.MUMU_DRAWINGS) do pcall(function() d.Box:Remove(); d.HealthBg:Remove(); d.HealthBar:Remove() end) end end
@@ -59,12 +59,12 @@ local Settings = {
 local CurrentStickyTarget = nil
 _G.SilentTargetPos = nil -- 🚀 預先計算好的魔術彈座標快取
 
--- 🚀 全域射線快取 (消滅 GC 垃圾回收造成的卡頓)
+--  全域射線快取 
 local MUMU_RaycastParams = RaycastParams.new()
 MUMU_RaycastParams.FilterType = Enum.RaycastFilterType.Exclude
 MUMU_RaycastParams.IgnoreWater = true
 
--- ⚡ [3. 遊戲邏輯與改良版預判] ⚡
+--  [ 遊戲邏輯與改良版預判] 
 local function ToggleNoclip(state)
     if state then
         _G.MUMU_NOCLIP = RunService.Stepped:Connect(function()
@@ -115,13 +115,13 @@ end
 
 local function IsVisible(targetPos)
     if not Settings.WallCheck or not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("Head") then return true end
-    -- 🚀 更新忽略名單即可，不用每次都新建 RaycastParams
+    --  更新忽略名單即可，不用每次都新建 RaycastParams
     MUMU_RaycastParams.FilterDescendantsInstances = {LocalPlayer.Character, Camera}
     local origin = Camera.CFrame.Position
     return not workspace:Raycast(origin, targetPos - origin, MUMU_RaycastParams)
 end
 
--- ⚡ [4. UI 生成系統] ⚡
+--  [ UI 生成系統] 
 local SafeGui = (gethui and gethui()) or game:GetService("CoreGui")
 if SafeGui:FindFirstChild("MUMU_UI") then SafeGui.MUMU_UI:Destroy() end
 
@@ -203,7 +203,7 @@ UIS.InputBegan:Connect(function(i, gp)
     end 
 end)
 
--- ⚡ [5. 輸入系統] ⚡
+-- [ 輸入系統] 
 UIS.InputBegan:Connect(function(i, gp)
     if not gp and (i.KeyCode == Enum.KeyCode.T or i.UserInputType == Enum.UserInputType.MouseButton3) then
         local c, md, ctr = nil, Settings.FOV, Camera.ViewportSize/2
@@ -226,7 +226,7 @@ end)
 
 UIS.JumpRequest:Connect(function() if Settings.InfJump and LocalPlayer.Character then local hum = LocalPlayer.Character:FindFirstChild("Humanoid"); if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end end end)
 
--- 🚀 輕量化攔截器 (徹底解除開槍瞬間卡頓)
+--  輕量化攔截器 
 if hookmetamethod then
     local OldNC = hookmetamethod(game, "__namecall", function(self, ...)
         local m = getnamecallmethod(); local a = {...}
@@ -258,7 +258,7 @@ local FlyBodyGyro, FlyBodyVelocity, CONTROL = nil, nil, {F=0, B=0, L=0, R=0, UP=
 UIS.InputBegan:Connect(function(i, gp) if not gp then local k=i.KeyCode; if k==Enum.KeyCode.W then CONTROL.F=1 elseif k==Enum.KeyCode.S then CONTROL.B=-1 elseif k==Enum.KeyCode.A then CONTROL.L=-1 elseif k==Enum.KeyCode.D then CONTROL.R=1 elseif k==Enum.KeyCode.Space then CONTROL.UP=1 elseif k==Enum.KeyCode.LeftControl then CONTROL.DOWN=-1 end end end)
 UIS.InputEnded:Connect(function(i) local k=i.KeyCode; if k==Enum.KeyCode.W then CONTROL.F=0 elseif k==Enum.KeyCode.S then CONTROL.B=0 elseif k==Enum.KeyCode.A then CONTROL.L=0 elseif k==Enum.KeyCode.D then CONTROL.R=0 elseif k==Enum.KeyCode.Space then CONTROL.UP=0 elseif k==Enum.KeyCode.LeftControl then CONTROL.DOWN=0 end end)
 
--- ⚡ [6. 極限防禦渲染引擎] ⚡
+--  [ 極限防禦渲染引擎] 
 _G.MUMU_CONN = RunService.RenderStepped:Connect(function()
     if _G.MUMU_FOV_CIRCLE then
         _G.MUMU_FOV_CIRCLE.Position = Camera.ViewportSize / 2
@@ -331,7 +331,7 @@ _G.MUMU_CONN = RunService.RenderStepped:Connect(function()
     end
 
     _G.SilentTarget = bestSilentTarget
-    -- 🚀 提前將魔術彈座標計算好，讓攔截器無腦讀取不卡頓
+    --  提前將魔術彈座標計算好，讓攔截器無腦讀取不卡頓
     if Settings.SilentAim and bestSilentTarget then
         _G.SilentTargetPos = GetPred(bestSilentTarget)
     else
