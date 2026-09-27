@@ -1,4 +1,4 @@
-```lua
+
 # mumu ez script
 
 local TweenService = game:GetService("TweenService")
@@ -2154,4 +2154,4 @@ localPlayer.CharacterAdded:Connect(function()
         activateBuso()
     end
 end)
-```
+
