@@ -211,6 +211,21 @@ local lastNpcTarget = ""
 local isProcessingQuest = false
 
 ----------------------------------------------------------------
+-- [Castle Defense Target]
+----------------------------------------------------------------
+
+-- 守城核心座標
+local CastlePosition =
+    Vector3.new(
+        179.43614196777344,
+        13.819701194763184,
+        898.814697265625
+    )
+
+-- 守城模式目前鎖定的怪
+local lockedCastleTarget = nil
+
+----------------------------------------------------------------
 -- [Material Teleport Positions]
 ----------------------------------------------------------------
 local matPositionMap = {
@@ -1903,6 +1918,9 @@ local toggleFarm =
                 _G.KillAllMobMoon =
                     false
 
+                lockedCastleTarget =
+                    nil
+
                 if _G.StartFarmLoopFunc then
 
                     _G.StartFarmLoopFunc()
@@ -2070,13 +2088,16 @@ MoonTab:AddToggle({
 
             _G.KillAllMobMoon =
                 false
+
+            lockedCastleTarget =
+                nil
         end
     end
 })
 
 MoonTab:AddToggle({
 
-    Name = "Kill All Mob - FASTEST",
+    Name = "Kill All Mob - CASTLE DEFENSE",
 
     Default =
         _G.KillAllMobMoon,
@@ -2102,6 +2123,26 @@ MoonTab:AddToggle({
 
             _G.AutoEventMoon =
                 false
+
+            ------------------------------------------------
+            -- 開啟守城時清除舊目標
+            ------------------------------------------------
+            lockedCastleTarget =
+                nil
+
+            currentTargetRoot =
+                nil
+
+        else
+
+            ------------------------------------------------
+            -- 關閉守城
+            ------------------------------------------------
+            lockedCastleTarget =
+                nil
+
+            currentTargetRoot =
+                nil
         end
     end
 })
@@ -2162,6 +2203,9 @@ BossTab:AddToggle({
             _G.KillAllMobMoon =
                 false
 
+            lockedCastleTarget =
+                nil
+
             if _G.StartFarmLoopFunc then
 
                 _G.StartFarmLoopFunc()
@@ -2203,6 +2247,9 @@ BossTab:AddToggle({
 
             _G.KillAllMobMoon =
                 false
+
+            lockedCastleTarget =
+                nil
 
             if _G.StartFarmLoopFunc then
 
@@ -2248,6 +2295,9 @@ MaterialTab:AddToggle({
 
             _G.KillAllMobMoon =
                 false
+
+            lockedCastleTarget =
+                nil
 
             _G.HasTeleportedToIsland =
                 false
@@ -2476,7 +2526,7 @@ if _G.AutoRebirthEnabled then
 end
 
 ----------------------------------------------------------------
--- [Kill All Mob - FASTEST ACTUAL MOVEMENT SPEED]
+-- [Kill All Mob - CASTLE DEFENSE]
 ----------------------------------------------------------------
 task.spawn(function()
 
@@ -2513,6 +2563,9 @@ task.spawn(function()
 
                 if not mobFolder then
 
+                    lockedCastleTarget =
+                        nil
+
                     currentTargetRoot =
                         nil
 
@@ -2520,113 +2573,246 @@ task.spawn(function()
                 end
 
                 ------------------------------------------------
-                -- 找「實際移動速度」最快的 Mob
+                -- 檢查目前鎖定的怪
                 ------------------------------------------------
-                local fastestTarget =
-                    nil
+                local lockedStillAlive =
+                    false
 
-                local fastestSpeed =
-                    -math.huge
+                if
+                    lockedCastleTarget
+                    and lockedCastleTarget.Parent
+                then
 
-                for _, mob in pairs(
-                    mobFolder:GetChildren()
-                ) do
-
-                    local mobRoot =
-                        mob:FindFirstChild(
-                            "HumanoidRootPart"
-                        )
-
-                    local mobHum =
-                        mob:FindFirstChildOfClass(
+                    local lockedHumanoid =
+                        lockedCastleTarget.Parent
+                        :FindFirstChildOfClass(
                             "Humanoid"
                         )
 
-                    if mobRoot
-                        and mobHum
-                        and mobHum.Health > 0
+                    if
+                        lockedHumanoid
+                        and lockedHumanoid.Health > 0
                     then
 
-                        ------------------------------------------------
-                        -- 實際當下移動速度
-                        ------------------------------------------------
-                        local actualSpeed =
-                            mobRoot.AssemblyLinearVelocity.Magnitude
-
-                        if actualSpeed > fastestSpeed then
-
-                            fastestSpeed =
-                                actualSpeed
-
-                            fastestTarget =
-                                mobRoot
-                        end
+                        lockedStillAlive =
+                            true
                     end
                 end
 
                 ------------------------------------------------
-                -- 鎖定實際速度最快的 Mob
+                -- 目前目標死亡
+                -- 才重新找怪
+                ------------------------------------------------
+                if not lockedStillAlive then
+
+                    lockedCastleTarget =
+                        nil
+
+                    currentTargetRoot =
+                        nil
+
+                    local closestTarget =
+                        nil
+
+                    local closestDistance =
+                        math.huge
+
+                    ------------------------------------------------
+                    -- 搜尋離城堡座標最近的活怪
+                    ------------------------------------------------
+                    for _, mob in pairs(
+                        mobFolder:GetChildren()
+                    ) do
+
+                        local mobRoot =
+                            mob:FindFirstChild(
+                                "HumanoidRootPart"
+                            )
+
+                        local mobHumanoid =
+                            mob:FindFirstChildOfClass(
+                                "Humanoid"
+                            )
+
+                        if
+                            mobRoot
+                            and mobHumanoid
+                            and mobHumanoid.Health > 0
+                        then
+
+                            local distance =
+                                (
+                                    mobRoot.Position
+                                    - CastlePosition
+                                ).Magnitude
+
+                            if
+                                distance
+                                < closestDistance
+                            then
+
+                                closestDistance =
+                                    distance
+
+                                closestTarget =
+                                    mobRoot
+                            end
+                        end
+                    end
+
+                    ------------------------------------------------
+                    -- 鎖定最近城堡的怪
+                    ------------------------------------------------
+                    if
+                        closestTarget
+                        and closestTarget.Parent
+                    then
+
+                        lockedCastleTarget =
+                            closestTarget
+
+                        currentTargetRoot =
+                            closestTarget
+                    end
+                else
+
+                    ------------------------------------------------
+                    -- 目前怪還活著
+                    -- 保持原本目標
+                    ------------------------------------------------
+                    currentTargetRoot =
+                        lockedCastleTarget
+                end
+
+                ------------------------------------------------
+                -- 攻擊目前鎖定的怪
                 ------------------------------------------------
                 local finalTarget =
-                    fastestTarget
+                    lockedCastleTarget
 
                 if
                     finalTarget
                     and finalTarget.Parent
                 then
 
-                    currentTargetRoot =
-                        finalTarget
+                    local humanoid =
+                        finalTarget.Parent
+                        :FindFirstChildOfClass(
+                            "Humanoid"
+                        )
 
-                    ------------------------------------------------
-                    -- 技能
-                    ------------------------------------------------
-                    local orderedSkills =
-                        {
-                            "Z",
-                            "X",
-                            "C",
-                            "V"
-                        }
+                    if
+                        humanoid
+                        and humanoid.Health > 0
+                    then
 
-                    for _, skill in ipairs(
-                        orderedSkills
-                    ) do
+                        currentTargetRoot =
+                            finalTarget
 
-                        if
-                            not _G.KillAllMobMoon
-                            or not finalTarget.Parent
-                        then
-
-                            break
-                        end
-
-                        if _G.SelectedSkills[skill] then
+                        ------------------------------------------------
+                        -- M1
+                        ------------------------------------------------
+                        if _G.AutoM1 then
 
                             pcall(function()
 
-                                local currentCharacter =
-                                    localPlayer.Character
-
-                                local targetTool =
-                                    currentCharacter
-                                    and currentCharacter:FindFirstChildOfClass(
+                                local tool =
+                                    character:FindFirstChildOfClass(
                                         "Tool"
                                     )
 
-                                local toolName =
-                                    targetTool
-                                    and targetTool.Name
-                                    or "Combat"
+                                if tool then
 
-                                actionRemote:FireServer(
-                                    toolName,
-                                    string.lower(skill)
-                                )
+                                    tool:Activate()
+
+                                else
+
+                                    actionRemote:FireServer(
+                                        "Combat",
+                                        "attack"
+                                    )
+                                end
                             end)
-
-                            task.wait(0.03)
                         end
+
+                        ------------------------------------------------
+                        -- Skills
+                        ------------------------------------------------
+                        local orderedSkills =
+                            {
+                                "Z",
+                                "X",
+                                "C",
+                                "V"
+                            }
+
+                        for _, skill in ipairs(
+                            orderedSkills
+                        ) do
+
+                            if
+                                not _G.KillAllMobMoon
+                                or not finalTarget.Parent
+                            then
+
+                                break
+                            end
+
+                            local currentHumanoid =
+                                finalTarget.Parent
+                                :FindFirstChildOfClass(
+                                    "Humanoid"
+                                )
+
+                            if
+                                not currentHumanoid
+                                or currentHumanoid.Health <= 0
+                            then
+
+                                break
+                            end
+
+                            if
+                                _G.SelectedSkills[skill]
+                            then
+
+                                pcall(function()
+
+                                    local currentCharacter =
+                                        localPlayer.Character
+
+                                    local targetTool =
+                                        currentCharacter
+                                        and currentCharacter:FindFirstChildOfClass(
+                                            "Tool"
+                                        )
+
+                                    local toolName =
+                                        targetTool
+                                        and targetTool.Name
+                                        or "Combat"
+
+                                    actionRemote:FireServer(
+                                        toolName,
+                                        string.lower(skill)
+                                    )
+                                end)
+
+                                task.wait(0.03)
+                            end
+                        end
+
+                    else
+
+                        ------------------------------------------------
+                        -- 怪死了
+                        -- 下一輪找新的最近怪
+                        ------------------------------------------------
+                        lockedCastleTarget =
+                            nil
+
+                        currentTargetRoot =
+                            nil
                     end
 
                 else
@@ -2635,12 +2821,23 @@ task.spawn(function()
                         nil
                 end
             end)
+
+        else
+
+            ------------------------------------------------
+            -- 關閉守城
+            ------------------------------------------------
+            lockedCastleTarget =
+                nil
+
+            currentTargetRoot =
+                nil
         end
 
         ------------------------------------------------
-        -- 高頻率重新偵測
+        -- 高頻率檢查
         ------------------------------------------------
-        task.wait(0.01)
+        task.wait(0.03)
     end
 end)
 
@@ -3028,7 +3225,8 @@ teleportConnection =
                     if _G.KillAllMobMoon then
 
                         ------------------------------------------------
-                        -- Kill All：直接貼住 Mob Hitbox
+                        -- 守城：
+                        -- 直接貼住目前 Mob Hitbox
                         ------------------------------------------------
                         root.CFrame =
                             currentTargetRoot.CFrame
@@ -3142,7 +3340,6 @@ task.spawn(function()
                 or _G.AutoMaterial
                 or _G.AutoKillBoss
                 or _G.AutoSummonDuck
-                or _G.KillAllMobMoon
             )
             and not isProcessingQuest
         then
@@ -3277,6 +3474,15 @@ localPlayer.CharacterAdded:Connect(
     function()
 
         task.wait(2.0)
+
+        ------------------------------------------------
+        -- 重生後清除守城舊目標
+        ------------------------------------------------
+        lockedCastleTarget =
+            nil
+
+        currentTargetRoot =
+            nil
 
         if
             (
