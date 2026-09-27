@@ -1924,12 +1924,12 @@ teleportConnection =
                     local standPosition =
                         Vector3.new(
                             targetPos.X
-                                + (targetLook.X * 4.5),
+                                + (targetLook.X * 5),
 
                             targetPos.Y,
 
                             targetPos.Z
-                                + (targetLook.Z * 4.5)
+                                + (targetLook.Z * 5)
                         )
 
                     root.CFrame =
