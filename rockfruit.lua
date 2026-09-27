@@ -1128,7 +1128,7 @@ ConfigTab:AddSection({
 })
 
 ConfigTab:AddButton({
-    Name = "Save Config (บันทึกสถานะปุ่ม)",
+    Name = "Save Config (mumu top 1)",
     Callback = function()
         saveSettings()
     end
@@ -1495,7 +1495,7 @@ RebirthTab:AddSection({
 })
 
 RebirthTab:AddToggle({
-    Name = "Auto Rebirth (Lv. 20000+)",
+    Name = "Auto Rebirth (Lv. 36000+)",
     Default = _G.AutoRebirthEnabled,
 
     Callback = function(Value)
